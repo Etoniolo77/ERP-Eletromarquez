@@ -144,16 +144,16 @@ INSERT INTO public.movimentacoes (id, tipo, estoque_origem_id, estoque_destino_i
 ON CONFLICT (id) DO NOTHING;
 SELECT setval('movimentacoes_id_seq', 72701);
 
--- Itens de Movimentação
+-- Itens de Movimentação (movimentacao_ids corrigidos para referenciar IDs reais)
 INSERT INTO public.itens_movimentacoes (id, movimentacao_id, material_id, quantidade, observacao, material_seriado_id, valor, justificativa_id) VALUES
-  (1, 1, 1, 118, NULL, NULL, 34,   7),
-  (2, 2, 6, 93,  NULL, NULL, 132,  7),
-  (3, 2, 7, 25,  NULL, NULL, 4000, 7),
-  (4, 2, 8, 4,   NULL, NULL, 190,  7),
-  (5, 2, 9, 6,   NULL, NULL, 490,  7),
-  (6, 3, 4, 40,  NULL, NULL, 150,  7),
-  (7, 3, 5, 18,  NULL, NULL, 13,   7),
-  (8, 4, 2, 167, NULL, NULL, 27,   7),
-  (9, 4, 3, 154, NULL, NULL, 33,   7)
+  (1, 72694, 1, 118, NULL, NULL, 34,   7),
+  (2, 72695, 6, 93,  NULL, NULL, 132,  7),
+  (3, 72695, 7, 25,  NULL, NULL, 4000, 7),
+  (4, 72695, 8, 4,   NULL, NULL, 190,  7),
+  (5, 72695, 9, 6,   NULL, NULL, 490,  7),
+  (6, 72696, 4, 40,  NULL, NULL, 150,  7),
+  (7, 72696, 5, 18,  NULL, NULL, 13,   7),
+  (8, 72697, 2, 167, NULL, NULL, 27,   7),
+  (9, 72697, 3, 154, NULL, NULL, 33,   7)
 ON CONFLICT (id) DO NOTHING;
 SELECT setval('itens_movimentacoes_id_seq', 9);

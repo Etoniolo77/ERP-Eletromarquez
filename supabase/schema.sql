@@ -5,10 +5,32 @@
 -- =====================================================
 
 -- =====================================================
+-- LIMPEZA (para recriação segura)
+-- =====================================================
+drop view if exists public.vw_itens_reposicao;
+drop view if exists public.vw_estoque_resumo;
+
+drop trigger if exists set_updated_at on public.materiais;
+drop trigger if exists set_updated_at on public.profiles;
+
+drop table if exists public.inventario_itens cascade;
+drop table if exists public.inventarios cascade;
+drop table if exists public.itens_movimentacoes cascade;
+drop table if exists public.movimentacoes cascade;
+drop table if exists public.itens_estoque cascade;
+drop table if exists public.materiais cascade;
+drop table if exists public.usuario cascade;
+drop table if exists public.estoques cascade;
+drop table if exists public.tipo_justificativa cascade;
+drop table if exists public.tipo_material cascade;
+drop table if exists public.unidade_medida cascade;
+drop table if exists public.profiles cascade;
+
+-- =====================================================
 -- TABELAS DE SISTEMA (Autenticação)
 -- =====================================================
 
-create table if not exists public.profiles (
+create table public.profiles (
   id uuid references auth.users on delete cascade primary key,
   matricula text,
   nome_completo text not null,
@@ -40,20 +62,20 @@ create trigger on_auth_user_created
 -- =====================================================
 
 -- Unidades de Medida
-create table if not exists public.unidade_medida (
+create table public.unidade_medida (
   id serial primary key,
   nome text not null unique
 );
 
 -- Tipo de Material
-create table if not exists public.tipo_material (
+create table public.tipo_material (
   id serial primary key,
   nome text not null,
   justificar boolean not null default false
 );
 
 -- Tipo de Justificativa
-create table if not exists public.tipo_justificativa (
+create table public.tipo_justificativa (
   id serial primary key,
   nome text not null,
   destino text,
@@ -61,18 +83,18 @@ create table if not exists public.tipo_justificativa (
 );
 
 -- Estoques (Locais de armazenamento: Equipe ou Individual)
-create table if not exists public.estoques (
+create table public.estoques (
   id serial primary key,
   nome text not null,
   tipo_estoque text not null default 'Equipe',
   deposito text
 );
 
-create index if not exists idx_estoques_tipo on public.estoques(tipo_estoque);
-create index if not exists idx_estoques_deposito on public.estoques(deposito);
+create index idx_estoques_tipo on public.estoques(tipo_estoque);
+create index idx_estoques_deposito on public.estoques(deposito);
 
 -- Materiais
-create table if not exists public.materiais (
+create table public.materiais (
   id serial primary key,
   codigo text not null unique,
   descricao text not null,
@@ -93,10 +115,10 @@ create table if not exists public.materiais (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists idx_materiais_codigo on public.materiais(codigo);
+create index idx_materiais_codigo on public.materiais(codigo);
 
 -- Usuários (Funcionários - dados da planilha)
-create table if not exists public.usuario (
+create table public.usuario (
   id serial primary key,
   matricula integer,
   nome text not null,
@@ -104,18 +126,18 @@ create table if not exists public.usuario (
 );
 
 -- Itens de Estoque (saldo por estoque/material)
-create table if not exists public.itens_estoque (
+create table public.itens_estoque (
   id serial primary key,
   estoque_id integer not null references public.estoques(id),
   material_id integer not null references public.materiais(id),
   saldo integer not null default 0
 );
 
-create index if not exists idx_itens_estoque_estoque on public.itens_estoque(estoque_id);
-create index if not exists idx_itens_estoque_material on public.itens_estoque(material_id);
+create index idx_itens_estoque_estoque on public.itens_estoque(estoque_id);
+create index idx_itens_estoque_material on public.itens_estoque(material_id);
 
 -- Movimentações
-create table if not exists public.movimentacoes (
+create table public.movimentacoes (
   id serial primary key,
   tipo text not null,
   estoque_origem_id integer references public.estoques(id),
@@ -130,12 +152,12 @@ create table if not exists public.movimentacoes (
   mes_ano text
 );
 
-create index if not exists idx_movimentacoes_criado_em on public.movimentacoes(criado_em);
-create index if not exists idx_movimentacoes_tipo on public.movimentacoes(tipo);
-create index if not exists idx_movimentacoes_situacao on public.movimentacoes(situacao);
+create index idx_movimentacoes_criado_em on public.movimentacoes(criado_em);
+create index idx_movimentacoes_tipo on public.movimentacoes(tipo);
+create index idx_movimentacoes_situacao on public.movimentacoes(situacao);
 
 -- Itens da Movimentação
-create table if not exists public.itens_movimentacoes (
+create table public.itens_movimentacoes (
   id serial primary key,
   movimentacao_id integer not null references public.movimentacoes(id) on delete cascade,
   material_id integer not null references public.materiais(id),
@@ -146,8 +168,38 @@ create table if not exists public.itens_movimentacoes (
   justificativa_id integer references public.tipo_justificativa(id)
 );
 
-create index if not exists idx_itens_mov_movimentacao on public.itens_movimentacoes(movimentacao_id);
-create index if not exists idx_itens_mov_material on public.itens_movimentacoes(material_id);
+create index idx_itens_mov_movimentacao on public.itens_movimentacoes(movimentacao_id);
+create index idx_itens_mov_material on public.itens_movimentacoes(material_id);
+
+-- =====================================================
+-- TABELAS DE FUNCIONALIDADES DO APP
+-- =====================================================
+
+create table public.inventarios (
+  id serial primary key,
+  estoque_id integer not null references public.estoques(id),
+  mes_referencia date not null,
+  status text not null default 'ABERTO',
+  responsavel_id uuid references public.profiles(id),
+  data_inicio timestamptz,
+  data_fim timestamptz,
+  observacoes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.inventario_itens (
+  id serial primary key,
+  inventario_id integer not null references public.inventarios(id) on delete cascade,
+  material_id integer not null references public.materiais(id),
+  quantidade_sistema numeric(12,2) not null default 0,
+  quantidade_contagem numeric(12,2),
+  divergencia numeric(12,2),
+  justificativa text,
+  contado_por uuid references public.profiles(id),
+  contado_em timestamptz,
+  created_at timestamptz not null default now()
+);
 
 -- =====================================================
 -- VIEWS
@@ -208,6 +260,8 @@ alter table public.usuario enable row level security;
 alter table public.itens_estoque enable row level security;
 alter table public.movimentacoes enable row level security;
 alter table public.itens_movimentacoes enable row level security;
+alter table public.inventarios enable row level security;
+alter table public.inventario_itens enable row level security;
 
 create policy "allow_all_profiles" on public.profiles for all using (true) with check (true);
 create policy "allow_all_unidade_medida" on public.unidade_medida for all using (true) with check (true);
@@ -219,39 +273,6 @@ create policy "allow_all_usuario" on public.usuario for all using (true) with ch
 create policy "allow_all_itens_estoque" on public.itens_estoque for all using (true) with check (true);
 create policy "allow_all_movimentacoes" on public.movimentacoes for all using (true) with check (true);
 create policy "allow_all_itens_movimentacoes" on public.itens_movimentacoes for all using (true) with check (true);
-
--- =====================================================
--- TABELAS DE FUNCIONALIDADES DO APP
--- =====================================================
-
-create table if not exists public.inventarios (
-  id serial primary key,
-  estoque_id integer not null references public.estoques(id),
-  mes_referencia date not null,
-  status text not null default 'ABERTO',
-  responsavel_id uuid references public.profiles(id),
-  data_inicio timestamptz,
-  data_fim timestamptz,
-  observacoes text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists public.inventario_itens (
-  id serial primary key,
-  inventario_id integer not null references public.inventarios(id) on delete cascade,
-  material_id integer not null references public.materiais(id),
-  quantidade_sistema numeric(12,2) not null default 0,
-  quantidade_contagem numeric(12,2),
-  divergencia numeric(12,2),
-  justificativa text,
-  contado_por uuid references public.profiles(id),
-  contado_em timestamptz,
-  created_at timestamptz not null default now()
-);
-
-alter table public.inventarios enable row level security;
-alter table public.inventario_itens enable row level security;
 create policy "allow_all_inventarios" on public.inventarios for all using (true) with check (true);
 create policy "allow_all_inventario_itens" on public.inventario_itens for all using (true) with check (true);
 
