@@ -1,26 +1,283 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter", sans-serif;
 
-@theme inline {
+  /* Neutrals - Industrial Slate - Consistent with Stitch Master */
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-slate-950: #020617;
+
+  /* Stitch Brand Blue */
+  --color-brand-600: #1152d4;
+  --color-brand-700: #0b50da;
+
+  /* Semantic - High Contrast */
+  --color-primary: var(--color-brand-600);
+  --color-primary-dark: var(--color-brand-700);
+  --color-primary-hover: var(--color-brand-700);
+  --color-success: #10b981;
+  --color-danger: #f43f5e;
+  --color-warning: #f59e0b;
+  --color-info: #0ea5e9;
+
+  /* Semantic Theme Mapping - Required for @apply */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-text-muted: var(--text-muted);
+  --color-text-heading: var(--text-heading);
+
+  /* Industrial Sharpness */
+  --radius-none: 0px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-up {
+    from {
+      transform: translateY(8px);
+      opacity: 0;
+    }
+
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  --shadow-premium: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-premium-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    font-size: 100%;
+    --background: #f5f6f8;
+    --foreground: #1e293b;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --text-muted: #64748b;
+    --text-heading: #0f172a;
+
+    --primary: #1152d4;
+  }
+
+  .dark {
+    --background: #121212;
+    --foreground: #f1f5f9;
+    --surface: #0f172a;
+    --border: #1e293b;
+    --text-muted: #94a3b8;
+    --text-heading: #ffffff;
+
+    --primary: #0b50da;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    @apply antialiased;
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .industrial-card {
+    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-sm transition-all;
+  }
+
+  .industrial-header {
+    @apply px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between;
+  }
+
+  .industrial-title {
+    @apply text-[10px] font-semibold uppercase tracking-wider text-slate-800 dark:text-white opacity-70;
+  }
+
+  .industrial-label {
+    @apply text-[9px] font-medium uppercase tracking-wider text-slate-400;
+  }
+
+  .industrial-table {
+    @apply w-full text-left border-collapse;
+  }
+
+  .industrial-table th {
+    @apply p-4 text-[9px] font-semibold text-text-muted uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50;
+  }
+
+  .industrial-table td {
+    @apply p-4 border-b border-slate-100 dark:border-slate-800 text-xs font-normal leading-relaxed;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    @apply w-1.5 h-1.5;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 dark:bg-slate-800 rounded-full hover:bg-slate-300 dark:hover:bg-slate-700;
+  }
+}
+
+@layer components {
+
+  /* Clean & Airy Layout */
+  .page-container {
+    @apply mx-auto max-w-[1400px] w-full px-6 py-8;
+    animation: fade-in 0.8s ease-out forwards, slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Elegant Bento Cards */
+  .card-premium {
+    background-color: var(--surface);
+    border: 1px solid color-mix(in srgb, var(--border), transparent 40%);
+    @apply rounded-[1.25rem] shadow-premium overflow-hidden transition-all duration-500 hover:shadow-premium-hover;
+  }
+
+  .card-premium:hover {
+    border-color: color-mix(in srgb, var(--primary), transparent 80%);
+  }
+
+  .bento-grid {
+    @apply grid gap-5;
+  }
+
+  .kpi-card {
+    @apply bg-surface p-6 rounded-2xl border border-border shadow-sm flex flex-col justify-between min-h-[120px] transition-all duration-300 hover:shadow-md;
+  }
+
+  /* Professional Typography */
+  .text-metric {
+    @apply text-2xl font-semibold tracking-tight tabular-nums text-text-heading;
+  }
+
+  .text-label {
+    @apply text-xs font-medium text-text-muted tracking-tight;
+  }
+
+  .text-heading-premium {
+    @apply text-text-heading font-semibold tracking-tight;
+  }
+
+  /* Modern & Readable Tables */
+  .table-premium {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .table-premium th {
+    @apply bg-slate-50/50 dark:bg-slate-900/50 px-4 py-4 text-xs font-semibold text-text-muted border-b border-border text-left uppercase tracking-wider;
+  }
+
+  .table-premium td {
+    @apply px-4 py-4 border-b border-border/40 font-normal leading-relaxed text-foreground;
+  }
+
+  .table-premium tr:hover td {
+    @apply bg-slate-50/30 dark:bg-slate-800/10 transition-colors;
+  }
+
+  /* Refined Buttons */
+  .btn-premium {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-50;
+  }
+
+  .btn-primary {
+    background-color: var(--primary);
+    @apply text-white shadow-sm hover:shadow-lg;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-brand-700);
+    box-shadow: 0 10px 15px -3px color-mix(in srgb, var(--primary), transparent 80%);
+  }
+
+  .btn-secondary {
+    background-color: var(--surface);
+    @apply border border-border text-foreground shadow-sm;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-slate-50 dark:bg-slate-700;
+  }
+
+  .btn-ghost {
+    color: var(--text-muted);
+  }
+
+  .btn-ghost:hover {
+    @apply bg-slate-100 dark:bg-slate-800 text-text-heading;
+  }
+
+  /* Badge System */
+  .badge-premium {
+    @apply px-2.5 py-1 rounded-full text-[11px] font-semibold;
+  }
+
+  /* Better Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 dark:bg-slate-800 rounded-full hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors;
+  }
+}
+
+/* Utilities */
+.glass-morphism {
+  @apply bg-surface/70 backdrop-blur-xl border border-white/20 dark:border-white/5;
+}
+
+.text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-400;
+}
+
+/* Bento Specifics v4.0 */
+.bento-header {
+  @apply flex items-center justify-between px-6 py-4 border-b border-border/40;
+}
+
+.bento-content {
+  @apply p-6;
+}
+
+.metric-condensed {
+  @apply font-semibold tracking-tighter tabular-nums text-text-heading;
+}
+
+.label-condensed {
+  @apply text-[10px] font-medium text-text-muted uppercase tracking-wider;
 }
