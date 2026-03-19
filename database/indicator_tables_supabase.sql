@@ -1,6 +1,7 @@
 -- ============================================================
 -- Indicator Tables for ERP Eletromarquez
 -- Supabase Migration: indicator_tables_supabase.sql
+-- Execute no SQL Editor do Supabase
 -- ============================================================
 
 -- produtividade
@@ -26,9 +27,10 @@ CREATE TABLE IF NOT EXISTS produtividade (
   retorno_base_min      FLOAT DEFAULT 0,
   hora_extra_min        FLOAT DEFAULT 0
 );
-
 ALTER TABLE produtividade ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON produtividade FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON produtividade FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- auditorias_5s
 CREATE TABLE IF NOT EXISTS auditorias_5s (
@@ -45,9 +47,10 @@ CREATE TABLE IF NOT EXISTS auditorias_5s (
   nota_4s           FLOAT,
   nota_5s           FLOAT
 );
-
 ALTER TABLE auditorias_5s ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON auditorias_5s FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON auditorias_5s FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- frota_custos
 CREATE TABLE IF NOT EXISTS frota_custos (
@@ -66,9 +69,10 @@ CREATE TABLE IF NOT EXISTS frota_custos (
   tipo_manutencao   TEXT,
   custo_val         FLOAT DEFAULT 0
 );
-
 ALTER TABLE frota_custos ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON frota_custos FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON frota_custos FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- indisponibilidade
 CREATE TABLE IF NOT EXISTS indisponibilidade (
@@ -80,9 +84,10 @@ CREATE TABLE IF NOT EXISTS indisponibilidade (
   valor         FLOAT DEFAULT 0,
   tempo         FLOAT DEFAULT 0
 );
-
 ALTER TABLE indisponibilidade ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON indisponibilidade FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON indisponibilidade FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- rejeicoes
 CREATE TABLE IF NOT EXISTS rejeicoes (
@@ -104,9 +109,10 @@ CREATE TABLE IF NOT EXISTS rejeicoes (
   analista          TEXT,
   status            TEXT
 );
-
 ALTER TABLE rejeicoes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON rejeicoes FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON rejeicoes FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- logccm_mb52
 CREATE TABLE IF NOT EXISTS logccm_mb52 (
@@ -119,9 +125,10 @@ CREATE TABLE IF NOT EXISTS logccm_mb52 (
   valor_fisico                 FLOAT DEFAULT 0,
   valor_fisico_sem_pedalada    FLOAT DEFAULT 0
 );
-
 ALTER TABLE logccm_mb52 ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON logccm_mb52 FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON logccm_mb52 FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- logccm_item
 CREATE TABLE IF NOT EXISTS logccm_item (
@@ -136,9 +143,10 @@ CREATE TABLE IF NOT EXISTS logccm_item (
   saldo       FLOAT DEFAULT 0,
   valor       FLOAT DEFAULT 0
 );
-
 ALTER TABLE logccm_item ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON logccm_item FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON logccm_item FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- logccm_ruptura
 CREATE TABLE IF NOT EXISTS logccm_ruptura (
@@ -156,9 +164,10 @@ CREATE TABLE IF NOT EXISTS logccm_ruptura (
   diagrama        TEXT,
   inventario      TEXT
 );
-
 ALTER TABLE logccm_ruptura ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON logccm_ruptura FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON logccm_ruptura FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- logccm_serial
 CREATE TABLE IF NOT EXISTS logccm_serial (
@@ -170,9 +179,10 @@ CREATE TABLE IF NOT EXISTS logccm_serial (
   status      TEXT,
   deposito    TEXT
 );
-
 ALTER TABLE logccm_serial ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON logccm_serial FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON logccm_serial FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- apr_records
 CREATE TABLE IF NOT EXISTS apr_records (
@@ -185,9 +195,10 @@ CREATE TABLE IF NOT EXISTS apr_records (
   apr_digital FLOAT DEFAULT 0,
   efetividade FLOAT DEFAULT 0
 );
-
 ALTER TABLE apr_records ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON apr_records FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON apr_records FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- saida_base_records
 CREATE TABLE IF NOT EXISTS saida_base_records (
@@ -200,9 +211,10 @@ CREATE TABLE IF NOT EXISTS saida_base_records (
   custo_total      FLOAT DEFAULT 0,
   ofensor          TEXT
 );
-
 ALTER TABLE saida_base_records ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON saida_base_records FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON saida_base_records FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- sync_logs
 CREATE TABLE IF NOT EXISTS sync_logs (
@@ -212,9 +224,10 @@ CREATE TABLE IF NOT EXISTS sync_logs (
   status              TEXT,
   records_processed   INT
 );
-
 ALTER TABLE sync_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON sync_logs FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON sync_logs FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- system_configs
 CREATE TABLE IF NOT EXISTS system_configs (
@@ -223,6 +236,12 @@ CREATE TABLE IF NOT EXISTS system_configs (
   description TEXT,
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
-
 ALTER TABLE system_configs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_read" ON system_configs FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "allow_all_read" ON system_configs FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Configuração padrão: meta de produtividade
+INSERT INTO system_configs (key, value, description)
+VALUES ('meta_produtividade', '85', 'Meta global de produtividade (%)')
+ON CONFLICT (key) DO NOTHING;
