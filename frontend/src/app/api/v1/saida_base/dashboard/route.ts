@@ -1,4 +1,3 @@
-import { createServiceClient } from "@/lib/supabase/serviceClient"
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange } from "@/lib/dateRange"
 
@@ -8,16 +7,11 @@ export async function GET(req: NextRequest) {
     const periodo = searchParams.get("periodo") || "month"
     const view = searchParams.get("view") || "dia"
 
-    const supabase = createServiceClient()
     const { startDate, endDate } = getDateRange(periodo)
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1"
 
-    const { data: rows } = await supabase
-      .from("saida_base_records")
-      .select("*")
-      .gte("data", startDate)
-      .lte("data", endDate)
-
-    const data = rows || []
+    const res = await fetch(`${API_URL}/proxy/saida_base_records?data.gte=${startDate}&data.lte=${endDate}`, { cache: "no-store" })
+    const data = res.ok ? await res.json() : []
     const meta = 30 // meta em minutos
 
     const round1 = (n: number) => Math.round(n * 10) / 10

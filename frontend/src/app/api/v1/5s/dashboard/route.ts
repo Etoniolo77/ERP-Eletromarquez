@@ -1,4 +1,3 @@
-import { createServiceClient } from "@/lib/supabase/serviceClient"
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange } from "@/lib/dateRange"
 
@@ -8,24 +7,18 @@ export async function GET(req: NextRequest) {
     const periodo = searchParams.get("periodo") || "month"
     const base = searchParams.get("base") || ""
 
-    const supabase = createServiceClient()
     const { startDate, endDate } = getDateRange(periodo)
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1"
 
-    let query = supabase
-      .from("auditorias_5s")
-      .select("*")
-      .gte("data_auditoria", startDate)
-      .lte("data_auditoria", endDate)
-
+    let endpoint = `${API_URL}/proxy/auditorias_5s?data_auditoria.gte=${startDate}&data_auditoria.lte=${endDate}`
     if (base && base !== "Todas") {
-      query = query.eq("base", base)
+      endpoint += `&base=${encodeURIComponent(base)}`
     }
 
-    const { data: rows } = await query
+    const res = await fetch(endpoint, { cache: "no-store" })
+    const data = res.ok ? await res.json() : []
 
-    const data = rows || []
-
-    const all_bases: string[] = [...new Set((rows || []).map((r: any) => r.base).filter(Boolean))] as string[]
+    const all_bases: string[] = [...new Set((data || []).map((r: any) => r.base).filter(Boolean))] as string[]
 
     const empty = {
       meta_5s: 85,

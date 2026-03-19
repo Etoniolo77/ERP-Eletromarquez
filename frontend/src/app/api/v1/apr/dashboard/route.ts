@@ -1,4 +1,3 @@
-import { createServiceClient } from "@/lib/supabase/serviceClient"
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange, getPrevDateRange } from "@/lib/dateRange"
 
@@ -8,17 +7,19 @@ export async function GET(req: NextRequest) {
     const sector = searchParams.get("sector") || "CCM"
     const periodo = searchParams.get("periodo") || "month"
 
-    const supabase = createServiceClient()
     const { startDate, endDate } = getDateRange(periodo)
     const { startDate: prevStart, endDate: prevEnd } = getPrevDateRange(periodo)
 
-    const [{ data: rows }, { data: prevRows }] = await Promise.all([
-      supabase.from("apr_records").select("*").eq("sector", sector).gte("data", startDate).lte("data", endDate),
-      supabase.from("apr_records").select("efetividade").eq("sector", sector).gte("data", prevStart).lte("data", prevEnd),
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1"
+    
+    // Convertendo as chamadas Supabase SDK para Fetch do backend Python proxy
+    const [currRes, prevRes] = await Promise.all([
+      fetch(`${API_URL}/proxy/apr_records?sector=${encodeURIComponent(sector)}&data.gte=${startDate}&data.lte=${endDate}`, { cache: "no-store" }),
+      fetch(`${API_URL}/proxy/apr_records?sector=${encodeURIComponent(sector)}&data.gte=${prevStart}&data.lte=${prevEnd}&select=efetividade`, { cache: "no-store" })
     ])
 
-    const data = rows || []
-    const prev = prevRows || []
+    const data = currRes.ok ? await currRes.json() : []
+    const prev = prevRes.ok ? await prevRes.json() : []
     const meta = 95
 
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0

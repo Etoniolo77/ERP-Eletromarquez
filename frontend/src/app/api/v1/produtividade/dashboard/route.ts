@@ -1,4 +1,3 @@
-import { createServiceClient } from "@/lib/supabase/serviceClient"
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange, getPrevDateRange } from "@/lib/dateRange"
 
@@ -8,18 +7,20 @@ export async function GET(req: NextRequest) {
     const periodo = searchParams.get("periodo") || "month"
     const view = searchParams.get("view") || "equipe"
 
-    const supabase = createServiceClient()
     const { startDate, endDate } = getDateRange(periodo)
     const { startDate: prevStart, endDate: prevEnd } = getPrevDateRange(periodo)
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1"
 
-    const [{ data: rows }, { data: prevRows }, { data: configRow }] = await Promise.all([
-      supabase.from("produtividade").select("*").gte("data", startDate).lte("data", endDate),
-      supabase.from("produtividade").select("produtividade_pct").gte("data", prevStart).lte("data", prevEnd),
-      supabase.from("system_configs").select("value").eq("key", "meta_produtividade").maybeSingle(),
+    const [currRes, prevRes, configRes] = await Promise.all([
+      fetch(`${API_URL}/proxy/produtividade_records?data.gte=${startDate}&data.lte=${endDate}`, { cache: "no-store" }),
+      fetch(`${API_URL}/proxy/produtividade_records?data.gte=${prevStart}&data.lte=${prevEnd}&select=produtividade_pct`, { cache: "no-store" }),
+      fetch(`${API_URL}/proxy/system_configs?key=meta_produtividade`, { cache: "no-store" }),
     ])
 
-    const data = rows || []
-    const prev = prevRows || []
+    const data = currRes.ok ? await currRes.json() : []
+    const prev = prevRes.ok ? await prevRes.json() : []
+    const configData = configRes.ok ? await configRes.json() : []
+    const configRow = configData.length > 0 ? configData[0] : null
 
     const meta_prod = configRow?.value ? parseFloat(configRow.value) : 85
 

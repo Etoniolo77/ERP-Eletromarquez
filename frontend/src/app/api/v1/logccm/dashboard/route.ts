@@ -1,26 +1,25 @@
-import { createServiceClient } from "@/lib/supabase/serviceClient"
 import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
-    const supabase = createServiceClient()
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1"
 
     const [
-      { data: mb52Rows },
-      { data: itemRows },
-      { data: rupturaRows },
-      { data: serialRows },
+      currMb52,
+      currItem,
+      currRuptura,
+      currSerial
     ] = await Promise.all([
-      supabase.from("logccm_mb52").select("*"),
-      supabase.from("logccm_item").select("*"),
-      supabase.from("logccm_ruptura").select("*"),
-      supabase.from("logccm_serial").select("*"),
+      fetch(`${API_URL}/proxy/logccm_mb52`, { cache: "no-store" }),
+      fetch(`${API_URL}/proxy/logccm_item`, { cache: "no-store" }),
+      fetch(`${API_URL}/proxy/logccm_ruptura`, { cache: "no-store" }),
+      fetch(`${API_URL}/proxy/logccm_serial`, { cache: "no-store" }),
     ])
 
-    const mb52 = mb52Rows || []
-    const items = itemRows || []
-    const rupturas = rupturaRows || []
-    const seriais = serialRows || []
+    const mb52 = currMb52.ok ? await currMb52.json() : []
+    const items = currItem.ok ? await currItem.json() : []
+    const rupturas = currRuptura.ok ? await currRuptura.json() : []
+    const seriais = currSerial.ok ? await currSerial.json() : []
 
     const round2 = (n: number) => Math.round(n * 100) / 100
 

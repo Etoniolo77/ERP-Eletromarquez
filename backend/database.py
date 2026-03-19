@@ -1,16 +1,19 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 import os
+from dotenv import load_dotenv
 
-# Base directory
+# Carrega variáveis do arquivo .env
+load_dotenv()
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-# SQLite Fallback ou Supabase URL
+# Forcar SQLite para funcionar local route proxy e ignorar .env
 DEFAULT_URL = f"sqlite:///{os.path.join(DATA_DIR, 'portal.db')}"
-SQLALCHEMY_DATABASE_URL = os.environ.get("SUPABASE_DB_URL", DEFAULT_URL)
+SQLALCHEMY_DATABASE_URL = DEFAULT_URL
 
 is_sqlite = SQLALCHEMY_DATABASE_URL.startswith("sqlite")
 

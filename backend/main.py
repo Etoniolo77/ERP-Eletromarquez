@@ -58,6 +58,9 @@ class SyncLogResponse(BaseModel):
 import routers.turmas_rdo as turmas_rdo_router
 app.include_router(turmas_rdo_router.router)
 
+import routers.proxy as proxy_router
+app.include_router(proxy_router.router)
+
 @app.get("/")
 def read_root():
     return {"message": "Bem-vindo a API do Portal 3.1", "status": "running"}
@@ -2414,44 +2417,14 @@ def get_sync_status(db: Session = Depends(get_db)):
     return logs
 
 # ======= ROUTE DE TRIGGER (Manual Force Sync) =======
-@app.post("/api/v1/sync/run")
-def force_sync(module: str = Query("all", description="Módulo a sincronizar: all, produtividade, 5s, rejeicoes, frota, indisponibilidade, logccm, apr, saida_base, turmas_rdo"), db: Session = Depends(get_db)):
-    import sync_engine
-    try:
-        api_cache.clear()
-
-        sync_map = {
-            "produtividade": sync_engine.sync_produtividade,
-            "5s": sync_engine.sync_5s,
-            "rejeicoes": sync_engine.sync_rejeicoes,
-            "frota": sync_engine.sync_frota,
-            "indisponibilidade": sync_engine.sync_indisponibilidade,
-            "logccm": sync_engine.sync_logccm,
-            "apr": sync_engine.sync_apr,
-            "saida_base": sync_engine.sync_saida_base,
-            "produtividade_ccm": sync_engine.sync_produtividade_ccm,
-        }
-
-        module = module.lower().strip()
-
-        if module == "all":
-            sync_engine.run_all_syncs(db)
-            synced = "todos os módulos"
-        elif module == "turmas_rdo":
-            # Turmas RDO reutiliza os dados de produtividade
-            sync_engine.sync_produtividade(db)
-            synced = "turmas_rdo (produtividade)"
-        elif module in sync_map:
-            sync_map[module](db)
-            synced = module
-        else:
-            raise HTTPException(status_code=400, detail=f"Módulo desconhecido: {module}")
-
-        return {"status": "success", "message": f"Sincronização de '{synced}' concluída. Cache resetado."}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.api_route("/api/v1/sync/run", methods=["GET", "POST"])
+def force_sync(module: str = Query("all", description="Módulo a sincronizar"), db: Session = Depends(get_db)):
+    # Desabilitado para FastLoad na Web: Sync executado offline pelo robô Python.
+    return {
+        "status": "sucesso",
+        "mensagem": f"Auto-Sync na interface desativado. Módulo [{module}] deve ser sincronizado via painel admin ou robô.",
+        "detalhes": []
+    }
 
 # ======= CONFIGURATIONS ENDPOINTS =======
 
