@@ -1,0 +1,44 @@
+Abas encontradas: ['FROTA', 'INFO', 'ITENS PREVENTIVA', 'Fornecedores BD', 'FORNECEDORES', 'Planilha3', 'Planilha1', 'Colaboradores BD', 'Frota BD', 'O QUE ESSA PLANILHA FAZ', 'AUX']
+
+--- Aba: FROTA ---
+Linha 0: ['Informativo Frota', nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, 'Outras Informações', nan, nan, nan, nan, nan, nan, nan, nan, nan, 'Mal Uso', nan]
+Colunas (header=1): ['ÍNDICE', 'DT SOLICITAÇÃO', 'DT AUTORIZAÇÃO', 'FORNECEDOR', 'CNPJ/CPF', 'OS CLIENTE', 'SOLICITADO POR', 'AUTORIZADO POR', 'NOME DO ITEM', 'DESCRIÇÃO DO ITEM', 'UND./SV.', 'QTDE', 'VALOR UNITÁRIO', 'TOTAL ORÇAMENTO', 'CARRO', 'PLACA', 'FROTA', 'OBS FROTA', 'TIPO EQUIPAM.', 'PREVENTIVA/CORRETIVA', 'MODELO', 'SEPARADOR1', 'N° DA NF', 'Coluna2', 'MODELO NF', 'DT EMISSÃO NF', 'DESCONTO R$', 'DESCONTO %', 'SEPARADOR2', 'CÓDIGO', 'CENTRO DE CUSTO', 'REGIONAL', 'BASE NO DIA', 'PRAZO', 'ESPECIFICAÇÃO', 'QUALIDADE', 'BASE HOJE', 'VALOR TOTAL', 'Coluna1', 'MAL USO MATRIC.', 'MAL USO NOME COLABORADOR']
+
+--- Aba: INFO ---
+Linha 0: ['EMPRESA', 'MARCA', 'MODELO', 'Nº VEÍCULO', 'PLACA', 'ANO', 'CHASSI', 'RENAVAN', 'CONTRATO', 'LOCALIZAÇÃO', 'BASE', 'SETOR ', 'CONDUTOR', 'TIPO', 'Nº VEICULO - ANTIGO', 'SITUAÇÃO', 'TABELA GERAL?', '__PowerAppsId__', 'Tratativa', 'USABILIDADE', 'AnoAux', 'Venda', 'Pergunta', 'Resposta', 'Equipes', 'Titular']
+Colunas (header=1): ['ELETROMARQUEZ', 'RENAULT', 'MASTER', 100, 'RQR4C07', 2021, '93YMAFEXCNJ974232', 1275445249, 'ITARANA', 'ITARANA.1', 'ITARANA.2', 'ADMINISTRATIVO', 'SESMT', 'VAN', 'Unnamed: 14', 'Unnamed: 15', 'Cadastrada', '3e5077bf-195a-47ab-82a5-be950e50b1c2', 'Unnamed: 18', 'Unnamed: 19', '2021.1', 'Unnamed: 21', 'Unnamed: 22', 'Unnamed: 23', 'Unnamed: 24', 'Unnamed: 25']
+
+--- Aba: ITENS PREVENTIVA ---
+Linha 0: ['COMEÇA COM', nan, 'ITENS COMPRADOS']
+Colunas (header=1): ['PNEU', 'Unnamed: 1', ' DESOBSTRUCAO RESPIRO AR']
+
+--- Aba: Fornecedores BD ---
+Linha 0: ['CNPJ DO FORNECEDOR', 'CODIGO', 'NOME DO FORNECEDOR']
+Colunas (header=1): ['11509896000155', 2567, 'POSTO COMSAUTO - AGUA DOCE DO NORTE']
+
+--- Aba: FORNECEDORES ---
+Linha 0: ['CNPJ DO FORNECEDOR', 'CODIGO', 'NOME DO FORNECEDOR']
+Colunas (header=1): ['31.085.819/0001-22 ', '01357', 'ECIGLEI PEREIRA MARTINS']
+
+--- Aba: Planilha3 ---
+Linha 0: [693]
+Colunas (header=1): [168]
+
+--- Aba: Planilha1 ---
+Erro ao ler aba
+
+--- Aba: Colaboradores BD ---
+Linha 0: ['id', 'matricula', 'nome', 'situacao']
+Colunas (header=1): [1866, 1883, 'Abel Henrique Lima do Nascimento Siqueira', 'Demitido']
+
+--- Aba: Frota BD ---
+Linha 0: ['EMPRESA', 'MARCA', 'MODELO', 'FROTA', 'PLACA', 'ANO', 'CHASSI', 'RENAVAN', 'REGIONAL', 'BASE', 'SETOR', 'TIPO', 'SITUAÇÃO', 'AnoAux']
+Colunas (header=1): ['ELETROMARQUEZ', 'Unnamed: 1', 'OUTROS', '-', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8', 'Unnamed: 9', 'Unnamed: 10', 'Unnamed: 11', 'Unnamed: 12', 'Unnamed: 13']
+
+--- Aba: O QUE ESSA PLANILHA FAZ ---
+Linha 0: [nan, nan]
+Colunas (header=1): ['Unnamed: 0', 'Esta planilha é usada pelo "Frotas - BI de custo" no Workspace de FROTAS']
+
+--- Aba: AUX ---
+Linha 0: [nan, 'BASES']
+Colunas (header=1): ['Unnamed: 0', 'ITARANA']

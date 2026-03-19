@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Frontend (Next.js)",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "npm run dev"],
+      "cwd": "frontend",
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "Backend (FastAPI/Uvicorn)",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "venv\\Scripts\\uvicorn.exe main:app --reload --host 127.0.0.1 --port 8001"],
+      "cwd": "backend",
+      "port": 8001
+    }
+  ]
+}
