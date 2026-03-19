@@ -17,6 +17,7 @@ interface PageHeaderProps {
     monitoramento?: string
     onRefresh?: () => void
     loading?: boolean
+    children?: React.ReactNode
 }
 
 // Parse "DD/MM/YYYY HH:MM" → Date
@@ -62,8 +63,9 @@ export function PageHeader({
     monitoramento,
     onRefresh,
     loading,
+    children,
 }: PageHeaderProps) {
-    const hasFooter = onRefresh || sourceFile || lastUpdate || monitoramento
+    const hasFooter = onRefresh || sourceFile || lastUpdate || monitoramento || children
 
     return (
         <div className="bg-surface border border-border rounded-sm shadow-sm overflow-hidden">
@@ -80,7 +82,7 @@ export function PageHeader({
                         {insights && insights.length > 0 ? (
                             insights.slice(0, 2).map((ins, i) => (
                                 <p key={i} className="text-[11px] font-medium text-text-heading leading-tight border-l-2 border-primary/30 pl-3">
-                                    {ins.text}
+                                    {ins.text.replace(/(\d+\.\d{2,})([%a-zA-Z]*)/g, (_, num, unit) => `${parseFloat(num).toFixed(1)}${unit}`)}
                                 </p>
                             ))
                         ) : (
@@ -91,10 +93,13 @@ export function PageHeader({
                     </div>
                 </div>
 
-                {/* Right column: button + metadata */}
-                {hasFooter && (
+                {/* Right column: button + metadata + filters */}
+                {(hasFooter || children) && (
                     <div className="flex flex-col items-end justify-center gap-2 min-w-[150px] flex-shrink-0">
-                        {onRefresh && <RefreshButton onClick={onRefresh} loading={loading ?? false} />}
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                           {children}
+                           {onRefresh && <RefreshButton onClick={onRefresh} loading={loading ?? false} />}
+                        </div>
                         <div className="text-right">
                             {monitoramento && (
                                 <p className="text-[9px] text-text-muted font-semibold uppercase tracking-tight leading-relaxed">

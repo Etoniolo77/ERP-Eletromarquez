@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import { KpiCard } from "@/components/dashboard/KpiCard"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { RefreshButton } from "@/components/ui/RefreshButton"
 import api from "@/lib/api"
 import { triggerSync } from "@/lib/sync"
@@ -114,37 +115,15 @@ export default function AprDigitalPage() {
     return (
         <div className="p-4 space-y-6 animate-in fade-in duration-700">
             {/* Header Area */}
-            <div className="flex flex-col md:flex-row items-stretch justify-between gap-4">
-                <div className="flex-1 bg-surface border border-border p-4 min-h-[105px] rounded-sm flex items-stretch gap-6 shadow-sm">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 self-center">
-                        <span className="material-symbols-outlined text-primary text-[28px]">shield_with_heart</span>
-                    </div>
-                    <div className="flex-1 flex flex-col justify-between py-1">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <h3 className="text-[10px] font-semibold uppercase text-text-muted tracking-[0.2em]">Safety Intelligence — APR Digital</h3>
-                        </div>
-                        <p className="text-[12px] font-medium text-text-heading leading-tight border-l-2 border-primary/30 pl-3">
-                            Monitoramento de Conformidade e Aderência por Regional • {sector === 'CCM' ? 'Centro de Controle e Medição' : 'Equipes de Campo / Turmas'}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="flex flex-col items-end justify-center gap-2 min-w-[150px]">
-                    <div className="flex items-center gap-2">
-                        <RefreshButton onClick={() => loadData(true)} loading={loading} />
-                    </div>
-
-                    <div className="text-right">
-                        <p className="text-[9px] text-text-muted font-semibold uppercase tracking-tight leading-relaxed">
-                            Arquivo: <span className="text-text-heading/70 font-semibold">{data.source_file}</span>
-                        </p>
-                        <p className="text-[9px] text-text-muted font-semibold uppercase tracking-tight leading-relaxed">
-                            Último Update: <span className="text-text-heading/70 font-semibold">{data.last_update}</span>
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <PageHeader
+                icon="shield_with_heart"
+                title="Safety Intelligence — APR Digital"
+                fallbackText={`Monitoramento de Conformidade e Aderência por Regional • ${sector === 'CCM' ? 'Centro de Controle e Medição' : 'Equipes de Campo / Turmas'}`}
+                sourceFile={data.source_file}
+                lastUpdate={data.last_update}
+                onRefresh={() => loadData(true)}
+                loading={loading}
+            />
 
             {/* Tabs Navigation */}
             <div className="flex items-center gap-8 border-b border-border px-2 pt-2">

@@ -5,6 +5,7 @@ import api from "@/lib/api"
 import { triggerSync } from "@/lib/sync"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { KpiCard } from "@/components/dashboard/KpiCard"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { RefreshButton } from "@/components/ui/RefreshButton"
 import { formatCurrency as formatCurrencyFull } from "@/lib/utils"
 
@@ -146,58 +147,29 @@ export default function IndisponibilidadePage() {
     return (
         <div className="p-4 space-y-4 animate-in fade-in duration-700">
             {/* Header Area - Best in Class Design */}
-            <div className="flex flex-col md:flex-row items-stretch justify-between gap-4">
-                <div className="flex-1 bg-surface border border-border p-4 min-h-[105px] rounded-sm flex items-stretch gap-6 shadow-sm">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 self-center">
-                        <span className="material-symbols-outlined text-primary text-[28px]">analytics</span>
-                    </div>
-                    <div className="flex-1 flex flex-col justify-between py-1">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <h3 className="text-[9px] font-semibold uppercase text-text-muted tracking-widest">Inteligência Operacional e Insights</h3>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
-                            {data.insights?.slice(0, 2).map((ins: any, i: number) => (
-                                <p key={i} className="text-[11px] font-medium text-text-heading leading-tight border-l-2 border-primary/30 pl-3">
-                                    {ins.text.replace(/(\d+(\.\d+)?)(%)/g, (_match: string, p1: string) => `${parseFloat(p1).toFixed(1)}%`)}
-                                </p>
-                            )) || (
-                                    <p className="text-[12px] font-bold text-text-heading leading-tight border-l-2 border-primary/30 pl-3">
-                                        Monitoramento de indisponibilidade consolidado para o arquivo {data.source_file}.
-                                    </p>
-                                )}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex flex-col items-end justify-between gap-2 min-w-[240px]">
-                    <div className="flex items-center gap-3">
-                        <RefreshButton onClick={() => loadData(true)} loading={loading} />
-                    </div>
-
-                    {/* Month Selector */}
-                    {data.available_months && data.available_months.length > 0 && (
-                        <select
-                            value={selectedMonth}
-                            onChange={(e) => setSelectedMonth(e.target.value)}
-                            className="bg-surface border border-border text-text-heading text-[11px] font-semibold uppercase tracking-tight rounded-sm px-2.5 py-1.5 focus:outline-none focus:border-primary/60 cursor-pointer"
-                        >
-                            {data.available_months.map((m) => (
-                                <option key={m} value={m}>{formatMonth(m)}</option>
-                            ))}
-                        </select>
-                    )}
-
-                    <div className="text-right">
-                        <p className="text-[9px] text-text-muted font-medium uppercase tracking-tight leading-relaxed">
-                            Arquivo: <span className="text-text-heading/70 font-medium">{data.source_file}</span>
-                        </p>
-                        <p className="text-[9px] text-text-muted font-medium uppercase tracking-tight leading-relaxed">
-                            Último Update: <span className="text-text-heading/70 font-medium">{data.last_update}</span>
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <PageHeader
+                icon="analytics"
+                title="Inteligência Operacional e Insights"
+                insights={data.insights}
+                fallbackText={`Monitoramento de indisponibilidade consolidado para o arquivo ${data.source_file}.`}
+                sourceFile={data.source_file}
+                lastUpdate={data.last_update}
+                onRefresh={() => loadData(true)}
+                loading={loading}
+            >
+                {/* Month Selector */}
+                {data.available_months && data.available_months.length > 0 && (
+                    <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="bg-surface border border-border text-text-heading text-[11px] font-semibold uppercase tracking-tight rounded-sm px-2.5 py-1.5 focus:outline-none focus:border-primary/60 cursor-pointer h-[32px] shadow-sm"
+                    >
+                        {data.available_months.map((m) => (
+                            <option key={m} value={m}>{formatMonth(m)}</option>
+                        ))}
+                    </select>
+                )}
+            </PageHeader>
 
             {/* KPI Cards */}
             {/* KPI Grid */}

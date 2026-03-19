@@ -7,6 +7,8 @@ import { EvolucaoLineChart } from "@/components/dashboard/EvolucaoLineChart"
 import { KpiCard } from "@/components/dashboard/KpiCard"
 import { RefreshButton } from "@/components/ui/RefreshButton"
 
+import { PageHeader } from "@/components/dashboard/PageHeader"
+
 // --- Interfaces ---
 interface Dashboard5S {
     meta_5s: number
@@ -350,99 +352,71 @@ export default function Page5SControle() {
     return (
         <div className="p-4 space-y-4 animate-in fade-in duration-700">
             {/* Header Area */}
-            <div className="flex flex-col md:flex-row items-stretch justify-between gap-4">
-                <div className="flex-1 bg-surface border border-border p-4 min-h-[105px] rounded-sm flex items-stretch gap-6 shadow-sm">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 self-center">
-                        <span className="material-symbols-outlined text-primary text-[28px]">
-                            {activeTab === 'dashboard' ? 'auto_awesome' : activeTab === 'historico' ? 'history' : 'assignment'}
+            <PageHeader
+                icon={activeTab === 'dashboard' ? 'auto_awesome' : activeTab === 'historico' ? 'history' : 'assignment'}
+                title={`Programa 5S — ${activeTab === 'dashboard' ? 'Evolução Cultural' : activeTab === 'historico' ? 'Registro de Inspeções' : 'Plano de Ação'}`}
+                fallbackText={activeTab === 'dashboard'
+                    ? `Média geral de conformidade em ${dashData?.stats?.media_conformidade ?? 0}% com ${dashData?.stats?.total_auditorias ?? 0} ciclos auditados.`
+                    : activeTab === 'historico' ? `Log Global de Auditorias SESMT • Auditoria Contínua` : `Gestão de Não Conformidades • Auditoria SESMT Digital`}
+                sourceFile={dashData?.source_file}
+                lastUpdate={dashData?.last_update}
+                onRefresh={() => activeTab === 'dashboard' ? loadDashboard(true) : activeTab === 'historico' ? loadHistorico(true) : loadPlanos(true)}
+                loading={loading}
+            >
+                {/* Filtro de Período */}
+                <div className="flex items-center gap-2 bg-surface border border-border px-3 py-1.5 rounded-sm shadow-sm h-[32px]">
+                    <span className="material-symbols-outlined text-[16px] text-primary">calendar_month</span>
+                    <select
+                        value={periodo}
+                        onChange={(e) => setPeriodo(e.target.value)}
+                        className="bg-transparent border-none outline-none text-[10px] font-bold uppercase tracking-widest text-text-heading cursor-pointer min-w-[80px]"
+                    >
+                        <option value="day">Dia</option>
+                        <option value="week">Semana</option>
+                        <option value="month">Mês</option>
+                    </select>
+                </div>
+
+                {/* Filtro de Base (Multi-seleção simplificada) */}
+                <div className="relative group">
+                    <div className="flex items-center gap-2 bg-surface border border-border px-3 py-1.5 rounded-sm shadow-sm cursor-pointer min-w-[140px] h-[32px]">
+                        <span className="material-symbols-outlined text-[16px] text-primary">location_on</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-text-heading truncate max-w-[100px]">
+                            {selectedBases.length === 0 ? "Todas Bases" : selectedBases.length === 1 ? selectedBases[0] : `${selectedBases.length} Bases`}
                         </span>
+                        <span className="material-symbols-outlined text-[14px] text-text-muted">expand_more</span>
                     </div>
-                    <div className="flex-1 flex flex-col justify-between py-1">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <h3 className="text-[10px] font-semibold uppercase text-text-muted tracking-[0.2em]">
-                                Programa 5S — {activeTab === 'dashboard' ? 'Evolução Cultural' : activeTab === 'historico' ? 'Registro de Inspeções' : 'Plano de Ação'}
-                            </h3>
-                        </div>
-                        <p className="text-[12px] font-medium text-text-heading leading-tight border-l-2 border-primary/30 pl-3">
-                            {activeTab === 'dashboard'
-                                ? `Média geral de conformidade em ${dashData?.stats?.media_conformidade ?? 0}% com ${dashData?.stats?.total_auditorias ?? 0} ciclos auditados.`
-                                : activeTab === 'historico'
-                                    ? `Log Global de Auditorias SESMT • Auditoria Contínua`
-                                    : `Gestão de Não Conformidades • Auditoria SESMT Digital`}
-                        </p>
-                    </div>
-                </div>
 
-                <div className="flex flex-col items-end justify-center gap-3 min-w-[320px]">
-                    <div className="flex items-center gap-2">
-                        {/* Filtro de Período */}
-                        <div className="flex items-center gap-2 bg-surface border border-border px-3 py-1.5 rounded-sm shadow-sm">
-                            <span className="material-symbols-outlined text-[16px] text-primary">calendar_month</span>
-                            <select
-                                value={periodo}
-                                onChange={(e) => setPeriodo(e.target.value)}
-                                className="bg-transparent border-none outline-none text-[10px] font-bold uppercase tracking-widest text-text-heading cursor-pointer min-w-[80px]"
+                    {/* Dropdown de Bases */}
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-surface border border-border shadow-xl rounded-sm py-2 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200">
+                        <div className="px-3 py-1 border-b border-border mb-1">
+                            <button
+                                onClick={() => setSelectedBases([])}
+                                className="text-[9px] font-bold text-primary uppercase hover:underline"
                             >
-                                <option value="day">Dia</option>
-                                <option value="week">Semana</option>
-                                <option value="month">Mês</option>
-                            </select>
+                                Limpar Seleção
+                            </button>
                         </div>
-
-                        {/* Filtro de Base (Multi-seleção simplificada) */}
-                        <div className="relative group">
-                            <div className="flex items-center gap-2 bg-surface border border-border px-3 py-1.5 rounded-sm shadow-sm cursor-pointer min-w-[140px]">
-                                <span className="material-symbols-outlined text-[16px] text-primary">location_on</span>
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-text-heading truncate max-w-[100px]">
-                                    {selectedBases.length === 0 ? "Todas Bases" : selectedBases.length === 1 ? selectedBases[0] : `${selectedBases.length} Bases`}
-                                </span>
-                                <span className="material-symbols-outlined text-[14px] text-text-muted">expand_more</span>
-                            </div>
-
-                            {/* Dropdown de Bases */}
-                            <div className="absolute right-0 top-full mt-1 w-48 bg-surface border border-border shadow-xl rounded-sm py-2 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200">
-                                <div className="px-3 py-1 border-b border-border mb-1">
-                                    <button
-                                        onClick={() => setSelectedBases([])}
-                                        className="text-[9px] font-bold text-primary uppercase hover:underline"
-                                    >
-                                        Limpar Seleção
-                                    </button>
-                                </div>
-                                <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                                    {(dashData?.all_bases || []).map(b => (
-                                        <label key={b} className="flex items-center gap-2 px-3 py-1.5 hover:bg-primary/5 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedBases.includes(b)}
-                                                onChange={() => {
-                                                    setSelectedBases(prev =>
-                                                        prev.includes(b) ? prev.filter(x => x !== b) : [...prev, b]
-                                                    )
-                                                }}
-                                                className="rounded-sm border-gray-300 text-primary focus:ring-primary h-3 w-3"
-                                            />
-                                            <span className="text-[10px] font-semibold text-text-heading uppercase">{b}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
+                        <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                            {(dashData?.all_bases || []).map(b => (
+                                <label key={b} className="flex items-center gap-2 px-3 py-1.5 hover:bg-primary/5 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedBases.includes(b)}
+                                        onChange={() => {
+                                            setSelectedBases(prev =>
+                                                prev.includes(b) ? prev.filter(x => x !== b) : [...prev, b]
+                                            )
+                                        }}
+                                        className="rounded-sm border-gray-300 text-primary focus:ring-primary h-3 w-3"
+                                    />
+                                    <span className="text-[10px] font-semibold text-text-heading uppercase">{b}</span>
+                                </label>
+                            ))}
                         </div>
-
-                        <RefreshButton onClick={() => activeTab === 'dashboard' ? loadDashboard(true) : activeTab === 'historico' ? loadHistorico(true) : loadPlanos(true)} loading={loading} />
-                    </div>
-
-                    <div className="text-right">
-                        <p className="text-[9px] text-text-muted font-semibold uppercase tracking-tight leading-relaxed">
-                            Arquivo: <span className="text-text-heading/70 font-semibold">{dashData?.source_file || '--'}</span>
-                        </p>
-                        <p className="text-[9px] text-text-muted font-semibold uppercase tracking-tight leading-relaxed">
-                            Último Update: <span className="text-text-heading/70 font-semibold">{dashData?.last_update || '--'}</span>
-                        </p>
                     </div>
                 </div>
-            </div>
+            </PageHeader>
 
             {/* Tabs Navigation */}
             <div className="flex items-center gap-8 border-b border-border px-2 pt-2">
