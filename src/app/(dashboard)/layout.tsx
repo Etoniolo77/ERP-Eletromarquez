@@ -1,4 +1,4 @@
-import { Sidebar } from "@/components/sidebar"
+import { Sidebar as MainSidebar } from "@/components/MainSidebar"
 import { Header } from "@/components/header"
 import { HeaderActionsProvider } from "@/components/providers/HeaderActionsProvider"
 
@@ -12,7 +12,7 @@ export default function DashboardLayout({
   return (
     <HeaderActionsProvider>
       <div className="min-h-screen bg-background">
-        <Sidebar />
+        <MainSidebar />
         <div
           className="transition-all duration-200"
           style={{ marginLeft: "var(--sidebar-w, 256px)" }}

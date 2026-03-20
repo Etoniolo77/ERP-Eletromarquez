@@ -95,7 +95,7 @@ function getActiveGroup(pathname: string): string | null {
   return null
 }
 
-export function Sidebar() {
+export function MainSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [expanded, setExpanded] = useState<string | null>(() => getActiveGroup(pathname))
