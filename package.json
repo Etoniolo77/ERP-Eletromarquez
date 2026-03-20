@@ -1,0 +1,12 @@
+{
+  "name": "root-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "vercel-build": "cd frontend && npm install && npm run build",
+    "install": "cd frontend && npm install",
+    "dev": "cd frontend && npm run dev",
+    "start": "cd frontend && npm run start"
+  }
+}
