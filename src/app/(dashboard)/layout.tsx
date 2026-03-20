@@ -1,4 +1,4 @@
-import { Sidebar as MainSidebar } from "@/components/MainSidebar"
+import { MainSidebar } from "@/components/MainSidebar"
 import { Header } from "@/components/header"
 import { HeaderActionsProvider } from "@/components/providers/HeaderActionsProvider"
 

@@ -123,7 +123,7 @@ export function MainSidebar() {
   }
 
   function toggleGroup(label: string) {
-    setExpanded((prev) => (prev === label ? null : label))
+    setExpanded((prev: string | null) => (prev === label ? null : label))
   }
 
   const sidebarContent = (
@@ -144,7 +144,7 @@ export function MainSidebar() {
           </div>
         )}
         <button
-          onClick={() => setCollapsed((v) => !v)}
+          onClick={() => setCollapsed((v: boolean) => !v)}
           className={cn(
             "rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors shrink-0",
             collapsed && "mx-auto mt-0"
