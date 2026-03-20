@@ -1,172 +1,219 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
+import React, { useEffect, useState, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
+import { FilterProvider } from "@/components/providers/FilterProvider"
+import { URLPeriodSync } from "@/components/providers/URLPeriodSync"
+import { PageHeader } from "@/components/dashboard/PageHeader"
+import { KpiCard } from "@/components/dashboard/KpiCard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Package, ArrowRightLeft, AlertTriangle, Warehouse } from "lucide-react"
-import { formatDate } from "@/lib/utils"
-import type { Movimentacao, EstoqueLocal } from "@/types/database"
 
-interface DashboardStats {
-  totalMateriais: number
-  totalMovimentacoes: number
-  itensAlerta: number
-  totalEstoques: number
+export interface Insight {
+  type: "success" | "warning" | "danger" | "info"
+  text: string
 }
 
-type MovRecente = Movimentacao & {
-  estoque_origem: EstoqueLocal | null
-  estoque_destino: EstoqueLocal | null
-  criado_por: { nome: string } | null
+interface GlobalStats {
+  ccmProd: number
+  ccmMetaAtingimento: number
+  ccmMeta: number
+  turmasProd: number
+  frotaCusto: number
+  aprAprovacao: number
 }
 
-export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalMateriais: 0,
-    totalMovimentacoes: 0,
-    itensAlerta: 0,
-    totalEstoques: 0,
-  })
-  const [movRecentes, setMovRecentes] = useState<MovRecente[]>([])
+function ExecutiveDashboardContent() {
+  const searchParams = useSearchParams()
+  const periodo = searchParams.get("periodo") || "month"
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
+  const [stats, setStats] = useState<GlobalStats | null>(null)
+  const [globalInsights, setGlobalInsights] = useState<Insight[]>([])
+  const [lastUpdate, setLastUpdate] = useState<string>("")
 
-  useEffect(() => {
-    async function loadStats() {
-      const [
-        { count: totalMateriais },
-        { count: totalMovimentacoes },
-        { data: itensAlerta },
-        { count: totalEstoques },
-        { data: recentes },
-      ] = await Promise.all([
-        supabase.from("materiais").select("*", { count: "exact", head: true }).eq("ativo", true),
-        supabase.from("movimentacoes").select("*", { count: "exact", head: true }),
-        supabase.from("vw_itens_reposicao").select("*"),
-        supabase.from("estoques").select("*", { count: "exact", head: true }).eq("tipo_estoque", "Equipe"),
-        supabase
-          .from("movimentacoes")
-          .select(`
-            *,
-            estoque_origem:estoques!movimentacoes_estoque_origem_id_fkey(nome),
-            estoque_destino:estoques!movimentacoes_estoque_destino_id_fkey(nome),
-            criado_por:usuario!movimentacoes_criado_por_id_fkey(nome)
-          `)
-          .order("criado_em", { ascending: false })
-          .limit(5),
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    try {
+      // Build the query string based on the current period
+      const query = new URLSearchParams()
+      if (periodo) query.set("periodo", periodo)
+
+      // Fetch all core modules in parallel
+      const [ccmRes, turmasRes, frotaRes, aprRes] = await Promise.all([
+        fetch(`/api/v1/produtividade/dashboard?${query.toString()}`).catch(() => null),
+        fetch(`/api/v1/turmas_rdo/dashboard?${query.toString()}`).catch(() => null),
+        fetch(`/api/v1/frota/dashboard?${query.toString()}`).catch(() => null),
+        fetch(`/api/v1/apr/dashboard?${query.toString()}`).catch(() => null)
       ])
 
+      const ccmData = ccmRes?.ok ? await ccmRes.json() : null
+      const turmasData = turmasRes?.ok ? await turmasRes.json() : null
+      const frotaData = frotaRes?.ok ? await frotaRes.json() : null
+      const aprData = aprRes?.ok ? await aprRes.json() : null
+
+      // Aggregate Stats
       setStats({
-        totalMateriais: totalMateriais || 0,
-        totalMovimentacoes: totalMovimentacoes || 0,
-        itensAlerta: itensAlerta?.length || 0,
-        totalEstoques: totalEstoques || 0,
+        ccmProd: ccmData?.stats?.media_prod || 0,
+        ccmMetaAtingimento: ccmData?.stats?.atingimento_meta || 0,
+        ccmMeta: ccmData?.meta_prod || 85,
+        turmasProd: turmasData?.stats?.media_prod || 0,
+        frotaCusto: frotaData?.stats?.custo_total || 0,
+        aprAprovacao: aprData?.stats?.taxa_aprovacao || 0
       })
-      setMovRecentes((recentes as MovRecente[]) || [])
+
+      // Aggregate Insights
+      const insights: Insight[] = []
+      
+      if (ccmData?.insights) {
+        ccmData.insights.forEach((i: any) => insights.push({ ...i, text: `[CCM] ${i.text}` }))
+      }
+      if (turmasData?.insights) {
+        turmasData.insights.forEach((i: any) => insights.push({ ...i, text: `[Turmas] ${i.text}` }))
+      }
+      if (frotaData?.insights) {
+        frotaData.insights.forEach((i: any) => insights.push({ ...i, text: `[Frota] ${i.text}` }))
+      }
+      if (aprData?.insights) {
+        aprData.insights.forEach((i: any) => insights.push({ ...i, text: `[SESMT] ${i.text}` }))
+      }
+
+      // Filter to show most critical insights first (danger > warning > info > success)
+      const sortedInsights = insights.sort((a, b) => {
+        const priority: Record<string, number> = { danger: 1, warning: 2, success: 3, info: 4 }
+        return (priority[a.type] || 5) - (priority[b.type] || 5)
+      })
+
+      setGlobalInsights(sortedInsights)
+      
+      const updateDate = new Date().toLocaleString("pt-BR", {
+        day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+      })
+      setLastUpdate(updateDate)
+
+    } catch (e) {
+      console.error("Dashboard Global Fetch Error:", e)
+    } finally {
       setLoading(false)
     }
+  }
 
-    loadStats()
-  }, [])
-
-  const cards = [
-    { title: "Total de Materiais", value: stats.totalMateriais, icon: <Package className="h-5 w-5 text-blue-600" />, color: "bg-blue-50" },
-    { title: "Movimentações", value: stats.totalMovimentacoes, icon: <ArrowRightLeft className="h-5 w-5 text-green-600" />, color: "bg-green-50" },
-    { title: "Itens em Alerta", value: stats.itensAlerta, icon: <AlertTriangle className="h-5 w-5 text-red-600" />, color: "bg-red-50" },
-    { title: "Estoques (Equipe)", value: stats.totalEstoques, icon: <Warehouse className="h-5 w-5 text-indigo-600" />, color: "bg-indigo-50" },
-  ]
+  useEffect(() => {
+    fetchDashboardData()
+  }, [periodo])
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-        <p className="text-gray-500">Visão geral do sistema</p>
-      </div>
+    <div className="flex-1 flex flex-col pt-0 p-4 lg:p-6 lg:pt-0 max-w-[1600px] mx-auto w-full gap-6">
+      <PageHeader
+        icon="monitoring"
+        title="DASHBOARD EXECUTIVO"
+        fallbackText="Visão Consolidada de Resultado"
+        lastUpdate={lastUpdate}
+        onRefresh={fetchDashboardData}
+        loading={loading}
+        showPeriodSelector={true}
+      />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {cards.map((card) => (
-          <Card key={card.title}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">{card.title}</p>
-                  <p className="text-3xl font-bold text-gray-900">
-                    {loading ? "..." : card.value}
-                  </p>
-                </div>
-                <div className={`rounded-lg p-3 ${card.color}`}>
-                  {card.icon}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {loading && !stats ? (
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <>
+          {/* Top KPIs Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+             <KpiCard
+                title="Produtividade Global (CCM)"
+                subtitle="Equipes na Meta"
+                value={`${stats?.ccmProd.toFixed(1)}%`}
+                icon="engineering"
+                target={`${stats?.ccmMeta}%`}
+                variation={stats?.ccmMetaAtingimento}
+                colorValue="primary"
+                trendMode="up-is-good"
+             />
+             <KpiCard
+                title="Produtividade (Turmas)"
+                subtitle="Média Operacional"
+                value={`${stats?.turmasProd.toFixed(1)}%`}
+                icon="trending_up"
+                target="-"
+                showVariation={false}
+                colorValue="success"
+             />
+             <KpiCard
+                title="Custo Total (Frota)"
+                subtitle="Período"
+                value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats?.frotaCusto || 0)}
+                icon="local_shipping"
+                target="-"
+                showVariation={false}
+                colorValue="warning"
+             />
+             <KpiCard
+                title="APRs Válidas (SESMT)"
+                subtitle="Taxa de Aprovação"
+                value={`${stats?.aprAprovacao.toFixed(1)}%`}
+                icon="verified_user"
+                target="100%"
+                showVariation={false}
+                colorValue="danger"
+             />
+          </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Módulos Ativos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {[
-                { nome: "Almoxarifado SESMT", status: "Ativo", cor: "bg-green-100 text-green-800" },
-                { nome: "Movimentações", status: "Ativo", cor: "bg-green-100 text-green-800" },
-                { nome: "Inventário", status: "Ativo", cor: "bg-green-100 text-green-800" },
-                { nome: "MRP", status: "Ativo", cor: "bg-green-100 text-green-800" },
-                { nome: "SESMT", status: "Em breve", cor: "bg-gray-100 text-gray-600" },
-                { nome: "CCM", status: "Em breve", cor: "bg-gray-100 text-gray-600" },
-                { nome: "Turmas", status: "Em breve", cor: "bg-gray-100 text-gray-600" },
-              ].map((mod) => (
-                <div key={mod.nome} className="flex items-center justify-between rounded-lg border border-gray-100 p-3">
-                  <span className="text-sm font-medium text-gray-900">{mod.nome}</span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${mod.cor}`}>
-                    {mod.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Atividade Recente</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <p className="text-sm text-gray-500">Carregando...</p>
-            ) : movRecentes.length === 0 ? (
-              <p className="text-sm text-gray-500">Nenhuma movimentação recente.</p>
-            ) : (
-              <div className="space-y-3">
-                {movRecentes.map((mov) => (
-                  <div key={mov.id} className="flex items-center justify-between rounded-lg border border-gray-100 p-3">
-                    <div className="flex items-center gap-3">
-                      <Badge variant={mov.situacao === "Aprovada" ? "success" : "default"}>
-                        {mov.tipo}
-                      </Badge>
-                      <div>
-                        <p className="text-sm font-medium">
-                          {mov.estoque_origem?.nome || "?"} → {mov.estoque_destino?.nome || "?"}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {mov.criado_por?.nome || "Sistema"} · {formatDate(mov.criado_em)}
-                        </p>
+          {/* Insights Region */}
+          <div className="grid gap-6">
+            <Card>
+              <CardHeader className="border-b border-border/50 pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                  <span className="material-symbols-outlined text-primary">campaign</span>
+                  Diagnóstico e Alertas Globais (CSD)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-border/50">
+                  {globalInsights.length > 0 ? (
+                    globalInsights.map((insight, idx) => (
+                      <div key={idx} className={`p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors ${insight.type === 'danger' ? 'bg-rose-50/20' : ''}`}>
+                        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                          insight.type === 'danger' ? 'bg-rose-100 text-rose-600' :
+                          insight.type === 'warning' ? 'bg-amber-100 text-amber-600' :
+                          insight.type === 'success' ? 'bg-emerald-100 text-emerald-600' :
+                          'bg-blue-100 text-blue-600'
+                        }`}>
+                          <span className="material-symbols-outlined text-[16px]">
+                            {insight.type === 'danger' ? 'error' :
+                             insight.type === 'warning' ? 'warning' :
+                             insight.type === 'success' ? 'check_circle' : 'info'}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0 pt-1.5">
+                           <p className={`text-sm tracking-tight ${insight.type === 'danger' ? 'font-bold text-rose-900' : 'font-medium text-slate-700'}`}>
+                             {insight.text}
+                           </p>
+                        </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-slate-500">
+                      Nenhum alerta crítico encontrado para o período.
                     </div>
-                    <Badge variant={mov.situacao === "Aprovada" ? "success" : "warning"}>
-                      {mov.situacao}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
+  )
+}
+
+export default function ExecutiveDashboard() {
+  return (
+    <FilterProvider>
+      <Suspense fallback={<div className="p-8 text-center">Iniciando...</div>}>
+         <URLPeriodSync />
+         <ExecutiveDashboardContent />
+      </Suspense>
+    </FilterProvider>
   )
 }

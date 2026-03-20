@@ -27,15 +27,15 @@ backend/*.db
 logs/
 
 # Next.js / Node
-frontend/node_modules/
-frontend/.next/
-frontend/out/
-frontend/build/
-frontend/.pnpm-debug.log*
-frontend/npm-debug.log*
-frontend/yarn-error.log*
-frontend/next-env.d.ts
-frontend/*.tsbuildinfo
+node_modules/
+.next/
+out/
+build/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-error.log*
+next-env.d.ts
+*.tsbuildinfo
 
 # OS
 .DS_Store
