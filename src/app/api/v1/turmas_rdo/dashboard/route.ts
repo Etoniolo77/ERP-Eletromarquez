@@ -1,27 +1,30 @@
+import { getDateRange } from "@/lib/dateRange"
 import { NextRequest, NextResponse } from "next/server"
 
-// turmas_rdo uses a dedicated table not currently in the schema.
-// Returns a sensible empty structure matching RDODashboardData interface.
-export async function GET(_req: NextRequest) {
-  return NextResponse.json({
-    period_label: "Período atual",
-    source_file: "supabase",
-    last_update: new Date().toISOString(),
-    stats: {
-      kpi1: { label: "Nota Média", value: "0%", legend: "Geral", trend: 0 },
-      kpi2: { label: "Conformidade", value: "0%", legend: "No período", trend: 0 },
-      kpi3: { label: "Equipes", value: "0", legend: "Avaliadas", trend: 0 },
-      kpi4: { label: "Alertas", value: "0", legend: "Pendentes", trend: 0 },
-    },
-    matriz: [],
-    indicadores_labels: [],
-    matriz_presenca: [],
-    regionais_presenca_labels: [],
-    history: [],
-    top_melhores: [],
-    top_piores: [],
-    top_piores_indicadores: [],
-    presenca_history: [],
-    insights: [{ type: "info", text: "Dados de RDO serão carregados após sincronização." }]
-  })
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const periodo = searchParams.get("periodo") || "month"
+    const { startDate, endDate } = getDateRange(periodo)
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001/api/v1"
+
+    // Buscamos dados do setor TURMAS na tabela de APR/SEG como proxy de conformidade
+    const res = await fetch(`${API_URL}/proxy/apr_records?sector=TURMAS&data.gte=${startDate}&data.lte=${endDate}`, { cache: "no-store" })
+    const data = res.ok ? await res.json() : []
+
+    const media_prod = data.length > 0 
+        ? Math.round(data.reduce((acc: number, r: any) => acc + (r.efetividade || 0), 0) / data.length)
+        : 0
+
+    return NextResponse.json({
+      stats: {
+        media_prod,
+        trend: 0
+      },
+      insights: media_prod < 85 && data.length > 0 ? [{ type: "warning", text: `Conformidade RDO Turmas está em ${media_prod}%, abaixo da meta de 85%.` }] : []
+    })
+  } catch (error) {
+    console.error("Turmas RDO API Error:", error)
+    return NextResponse.json({ stats: { media_prod: 0, trend: 0 }, insights: [] })
+  }
 }
