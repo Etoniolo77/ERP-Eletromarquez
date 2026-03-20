@@ -1,31 +1,24 @@
-import { createServiceClient } from "@/lib/supabase/serviceClient"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { safeFetch } from "@/lib/apiFetcher"
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const supabase = createServiceClient()
-    const since = new Date()
-    since.setFullYear(since.getFullYear() - 1)
-    const sinceStr = since.toISOString().split("T")[0]
+    const { searchParams } = new URL(req.url)
+    const regional = searchParams.get("regional") || ""
+    const setor = searchParams.get("setor") || ""
 
-    const { data: rows } = await supabase
-      .from("auditorias_5s")
-      .select("data_auditoria, base, inspetor, local_auditado, tipo_auditoria, conformidade_pct")
-      .gte("data_auditoria", sinceStr)
-      .order("data_auditoria", { ascending: false })
-      .limit(500)
+    let path = `/proxy/audit_5s`
+    const params = new URLSearchParams()
+    if (regional) params.append("regional", regional)
+    if (setor) params.append("setor", setor)
+    
+    const queryString = params.toString()
+    if (queryString) path += `?${queryString}`
 
-    const items = (rows || []).map((r: any) => ({
-      data: r.data_auditoria || "",
-      base: r.base || "",
-      local: r.local_auditado || "",
-      tipo: r.tipo_auditoria || "",
-      nota: r.conformidade_pct || 0,
-      inspetor: r.inspetor || "",
-    }))
+    const data = await safeFetch<any[]>(path, [])
 
-    return NextResponse.json({ items })
+    return NextResponse.json(data)
   } catch (err: any) {
-    return NextResponse.json({ items: [] }, { status: 200 })
+    return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

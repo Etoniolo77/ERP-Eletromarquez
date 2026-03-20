@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange } from "@/lib/dateRange"
+import { safeFetch } from "@/lib/apiFetcher"
 
 export async function GET(req: NextRequest) {
   try {
@@ -8,10 +9,8 @@ export async function GET(req: NextRequest) {
     const view = searchParams.get("view") || "dia"
 
     const { startDate, endDate } = getDateRange(periodo)
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001/api/v1"
-
-    const res = await fetch(`${API_URL}/proxy/saida_base_records?data.gte=${startDate}&data.lte=${endDate}`, { cache: "no-store" })
-    const data = res.ok ? await res.json() : []
+    
+    const data = await safeFetch<any[]>(`/proxy/saida_base_records?data.gte=${startDate}&data.lte=${endDate}`, [])
     const meta = 30 // meta em minutos
 
     const round1 = (n: number) => Math.round(n * 10) / 10

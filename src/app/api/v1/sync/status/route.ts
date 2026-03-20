@@ -1,16 +1,19 @@
-import { createServiceClient } from "@/lib/supabase/serviceClient"
 import { NextResponse } from "next/server"
+import { safeFetch } from "@/lib/apiFetcher"
 
 export async function GET() {
   try {
-    const supabase = createServiceClient()
-    const { data } = await supabase
-      .from("sync_logs")
-      .select("*")
-      .order("last_sync", { ascending: false })
-      .limit(10)
-    return NextResponse.json(data || [])
-  } catch {
-    return NextResponse.json([], { status: 200 })
+    const data = await safeFetch<any>("/proxy/sync_status", {
+      status: "unknown",
+      last_sync: null,
+      message: "Erro ao conectar com o motor de gestão."
+    })
+
+    return NextResponse.json(data)
+  } catch (err: any) {
+    return NextResponse.json({ 
+      status: "error", 
+      message: err.message 
+    }, { status: 500 })
   }
 }

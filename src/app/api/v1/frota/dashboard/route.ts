@@ -1,244 +1,107 @@
-import { createServiceClient } from "@/lib/supabase/serviceClient"
 import { NextRequest, NextResponse } from "next/server"
-import { getDateRange, getPrevDateRange } from "@/lib/dateRange"
+import { getDateRange } from "@/lib/dateRange"
+import { safeFetch } from "@/lib/apiFetcher"
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const periodo = searchParams.get("periodo") || "month"
-    const sector = searchParams.get("sector") || ""
-    const regional = searchParams.get("regional") || ""
 
-    const supabase = createServiceClient()
     const { startDate, endDate } = getDateRange(periodo)
 
-    let query = supabase.from("frota_custos").select("*")
+    // Try current period
+    let data = await safeFetch<any[]>(`/proxy/frota_custos?data.gte=${startDate}&data.lte=${endDate}`, [])
 
-    if (periodo !== "all") {
-      query = query.gte("data_solicitacao", startDate).lte("data_solicitacao", endDate)
+    // Fallback: If current month has no data, fetch ALL and determine latest month
+    if (data.length === 0) {
+      console.log(`[Frota API] No data for ${startDate} to ${endDate}. Attempting fallback to latest month.`)
+      const allData = await safeFetch<any[]>("/proxy/frota_custos", [])
+      if (allData.length > 0) {
+        const sorted = allData.sort((a, b) => new Date(b.data_solicitacao).getTime() - new Date(a.data_solicitacao).getTime())
+        const latestMonth = sorted[0].data_solicitacao.substring(0, 7) // "YYYY-MM"
+        data = allData.filter(r => r.data_solicitacao.startsWith(latestMonth))
+        console.log(`[Frota API] Falling back to month: ${latestMonth} (${data.length} records)`)
+      }
     }
 
-    if (sector) query = query.eq("setor", sector)
-    if (regional) query = query.eq("regional", regional)
-
-    let { data: rows } = await query
-    let currentData = rows || []
-
-    // Fallback: se o período atual não tem dados (comum para Frota), buscar o último mês disponível
-    if (currentData.length === 0 && (periodo === "month" || periodo === "latest")) {
-        const { data: latestRow } = await supabase.from("frota_custos").select("data_solicitacao").order("data_solicitacao", { ascending: false }).limit(1).single()
-        if (latestRow?.data_solicitacao) {
-            const lastDate = new Date(latestRow.data_solicitacao)
-            const firstDay = `${lastDate.getFullYear()}-${String(lastDate.getMonth() + 1).padStart(2, '0')}-01`
-            const lastDay = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, 0)
-            const lastDayStr = `${lastDate.getFullYear()}-${String(lastDate.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
-            
-            let fbQuery = supabase.from("frota_custos").select("*").gte("data_solicitacao", firstDay).lte("data_solicitacao", lastDayStr)
-            if (sector) fbQuery = fbQuery.eq("setor", sector)
-            if (regional) fbQuery = fbQuery.eq("regional", regional)
-            
-            const { data: fbRows } = await fbQuery
-            currentData = fbRows || []
-        }
+    if (data.length === 0) {
+      return NextResponse.json({
+        period: periodo,
+        last_update: new Date().toISOString(),
+        stats: { total_custo: 0, total_veiculos: 0, media_por_veiculo: 0, total_manutencoes: 0 },
+        regionais: [],
+        setores: [],
+        manutencoes: [],
+        top_veiculos: [],
+        evolucao: [],
+        insights: [{ type: "info", text: "Sem dados de custos de frota disponíveis." }]
+      })
     }
 
-    const data = currentData
-
-    const round1 = (n: number) => Math.round(n * 10) / 10
     const round2 = (n: number) => Math.round(n * 100) / 100
 
     const total_custo = round2(data.reduce((a: number, r: any) => a + (r.custo_val || 0), 0))
-    const qtd_servicos = data.length
-    const placas = [...new Set(data.map((r: any) => r.placa).filter(Boolean))] as string[]
-    const total_frota = placas.length
-    const ticket_medio = total_frota > 0 ? round2(total_custo / total_frota) : 0
+    const total_manutencoes = data.length
+    const veiculos = [...new Set(data.map((r: any) => r.placa).filter(Boolean))]
+    const total_veiculos = veiculos.length
+    const media_por_veiculo = total_veiculos > 0 ? round2(total_custo / total_veiculos) : 0
 
-    // History by MesAno
-    const histMap: Record<string, number> = {}
-    data.forEach((r: any) => {
-      if (!r.data_solicitacao) return
-      const d = new Date(r.data_solicitacao)
-      const key = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
-      histMap[key] = (histMap[key] || 0) + (r.custo_val || 0)
-    })
-    const history = Object.entries(histMap)
-      .sort((a, b) => {
-        const [am, ay] = a[0].split('/').map(Number)
-        const [bm, by] = b[0].split('/').map(Number)
-        return ay !== by ? ay - by : am - bm
-      })
-      .map(([MesAno, Val]) => ({ MesAno, Val: round2(Val) }))
-
-    // Regionais
-    const regMap: Record<string, number> = {}
+    // Group by regional
+    const regionalMap: Record<string, number> = {}
     data.forEach((r: any) => {
       const key = r.regional || "N/D"
-      regMap[key] = (regMap[key] || 0) + (r.custo_val || 0)
+      regionalMap[key] = (regionalMap[key] || 0) + (r.custo_val || 0)
     })
-    const regionais = Object.entries(regMap).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value: round2(value) }))
+    const regionais = Object.entries(regionalMap).map(([label, valor]) => ({ label, valor: round2(valor) }))
 
-    // Fornecedores
-    const fornMap: Record<string, number> = {}
-    data.forEach((r: any) => {
-      const key = r.fornecedor || "N/D"
-      fornMap[key] = (fornMap[key] || 0) + (r.custo_val || 0)
-    })
-    const fornecedores = Object.entries(fornMap).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value: round2(value) }))
-
-    // Manutencoes
-    const mantMap: Record<string, number> = {}
-    data.forEach((r: any) => {
-      const key = r.tipo_manutencao || "N/D"
-      mantMap[key] = (mantMap[key] || 0) + (r.custo_val || 0)
-    })
-    const manutencoes = Object.entries(mantMap).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value: round2(value) }))
-
-    // Idades: group by (current_year - ano_veiculo)
-    const currentYear = new Date().getFullYear()
-    const idadesMap: Record<string, { total: number; count: number }> = {}
-    data.forEach((r: any) => {
-      if (!r.ano_veiculo) return
-      const age = currentYear - r.ano_veiculo
-      const bucket = age <= 2 ? "0-2 anos" : age <= 5 ? "3-5 anos" : age <= 10 ? "6-10 anos" : "10+ anos"
-      if (!idadesMap[bucket]) idadesMap[bucket] = { total: 0, count: 0 }
-      idadesMap[bucket].total += (r.custo_val || 0)
-      idadesMap[bucket].count += 1
-    })
-    const bucketOrder = ["0-2 anos", "3-5 anos", "6-10 anos", "10+ anos"]
-    const idades = bucketOrder
-      .filter(b => idadesMap[b])
-      .map(b => ({
-        name: b,
-        value: round2(idadesMap[b].total),
-        media: round2(idadesMap[b].count > 0 ? idadesMap[b].total / idadesMap[b].count : 0)
-      }))
-
-    // Top offenders by placa
-    const placaMap: Record<string, { modelo: string; custo: number }> = {}
-    data.forEach((r: any) => {
-      if (!r.placa) return
-      if (!placaMap[r.placa]) placaMap[r.placa] = { modelo: r.modelo || "", custo: 0 }
-      placaMap[r.placa].custo += (r.custo_val || 0)
-    })
-    const topOffendersArr = Object.entries(placaMap)
-      .sort((a, b) => b[1].custo - a[1].custo)
-      .slice(0, 15)
-    const top_offenders = topOffendersArr.map(([id, v]) => ({
-      id,
-      modelo: v.modelo,
-      custo: round2(v.custo),
-      percent: round1(total_custo > 0 ? (v.custo / total_custo) * 100 : 0)
-    }))
-
-    // Pareto
-    const veiculos_ofensores = top_offenders.filter(v => v.custo > ticket_medio).length
-    const custo_ofensores = top_offenders.filter(v => v.custo > ticket_medio).reduce((a, v) => a + v.custo, 0)
-    const pareto = {
-      total_veiculos: total_frota,
-      veiculos_ofensores,
-      percentual_ofensores: round1(total_frota > 0 ? (veiculos_ofensores / total_frota) * 100 : 0),
-      custo_ofensores: round2(custo_ofensores)
-    }
-
-    // Custo medio tipo
-    const tipoMap: Record<string, { total: number; veiculos: Set<string> }> = {}
-    data.forEach((r: any) => {
-      const key = r.tipo || "N/D"
-      if (!tipoMap[key]) tipoMap[key] = { total: 0, veiculos: new Set() }
-      tipoMap[key].total += (r.custo_val || 0)
-      if (r.placa) tipoMap[key].veiculos.add(r.placa)
-    })
-    const custo_medio_tipo = Object.entries(tipoMap).map(([name, v]) => ({
-      name,
-      veiculos: v.veiculos.size,
-      custo: round2(v.veiculos.size > 0 ? v.total / v.veiculos.size : 0)
-    }))
-
-    // Custo medio setor
-    const setorMap: Record<string, { total: number; veiculos: Set<string> }> = {}
+    // Group by setor
+    const setorMap: Record<string, number> = {}
     data.forEach((r: any) => {
       const key = r.setor || "N/D"
-      if (!setorMap[key]) setorMap[key] = { total: 0, veiculos: new Set() }
-      setorMap[key].total += (r.custo_val || 0)
-      if (r.placa) setorMap[key].veiculos.add(r.placa)
+      setorMap[key] = (setorMap[key] || 0) + (r.custo_val || 0)
     })
-    const custo_medio_setor = Object.entries(setorMap).map(([name, v]) => ({
-      name,
-      veiculos: v.veiculos.size,
-      custo: round2(v.veiculos.size > 0 ? v.total / v.veiculos.size : 0)
-    }))
+    const setores = Object.entries(setorMap).map(([label, valor]) => ({ label, valor: round2(valor) }))
 
-    // Top servicos
-    const servMap: Record<string, number> = {}
+    // Group by manutencao
+    const manuMap: Record<string, number> = {}
     data.forEach((r: any) => {
-      const key = r.nome_servico || "N/D"
-      servMap[key] = (servMap[key] || 0) + (r.custo_val || 0)
+      const key = r.tipo_manutencao || "Geral"
+      manuMap[key] = (manuMap[key] || 0) + (r.custo_val || 0)
     })
-    const top_servicos = Object.entries(servMap)
+    const manutencoes = Object.entries(manuMap).map(([label, valor]) => ({ label, valor: round2(valor) }))
+
+    // Top Veículos
+    const placaMap: Record<string, number> = {}
+    data.forEach((r: any) => {
+      const key = r.placa || "N/D"
+      placaMap[key] = (placaMap[key] || 0) + (r.custo_val || 0)
+    })
+    const top_veiculos = Object.entries(placaMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
-      .map(([name, value]) => ({ name, value: round2(value) }))
-
-    // Matrix regional x setor
-    const matrixMap: Record<string, Record<string, { total: number; veiculos: Set<string> }>> = {}
-    data.forEach((r: any) => {
-      const reg = r.regional || "N/D"
-      const set = r.setor || "N/D"
-      if (!matrixMap[reg]) matrixMap[reg] = {}
-      if (!matrixMap[reg][set]) matrixMap[reg][set] = { total: 0, veiculos: new Set() }
-      matrixMap[reg][set].total += (r.custo_val || 0)
-      if (r.placa) matrixMap[reg][set].veiculos.add(r.placa)
-    })
-    const matrix: any[] = []
-    Object.entries(matrixMap).forEach(([reg, setores]) => {
-      Object.entries(setores).forEach(([set, v]) => {
-        matrix.push({
-          regional: reg,
-          setor: set,
-          total: round2(v.total),
-          veiculos: v.veiculos.size,
-          medio: round2(v.veiculos.size > 0 ? v.total / v.veiculos.size : 0)
-        })
-      })
-    })
+      .map(([placa, valor]) => ({ placa, valor: round2(valor) }))
 
     // Insights
     const insights = []
-    if (ticket_medio > 0) {
-      insights.push({ type: "info", text: `Ticket médio por veículo: R$ ${ticket_medio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` })
+    if (total_custo > 50000) {
+      insights.push({ type: "warning", text: `Custo total de frota elevado no período: R$ ${total_custo.toLocaleString('pt-BR')}.` })
     }
-    if (veiculos_ofensores > 0) {
-      insights.push({ type: "warning", text: `${veiculos_ofensores} veículos acima do ticket médio, representando custo elevado.` })
-    }
-    const prevData = manutencoes.find(m => m.name.toUpperCase().includes("CORRETIVA"))
-    const prevPct = prevData && total_custo > 0 ? round1((prevData.value / total_custo) * 100) : 0
-    if (prevPct > 50) {
-      insights.push({ type: "danger", text: `Manutenção corretiva representa ${prevPct}% do custo total — revisar plano preventivo.` })
-    } else if (prevPct > 0) {
-      insights.push({ type: "success", text: `Manutenção corretiva controlada em ${prevPct}% do total.` })
+    const mediaRef = 1500
+    if (media_por_veiculo > mediaRef) {
+      insights.push({ type: "danger", text: `Média por veículo (R$ ${media_por_veiculo}) acima da referência sugerida (R$ ${mediaRef}).` })
+    } else {
+      insights.push({ type: "success", text: `Custo médio por veículo está dentro da normalidade operacional.` })
     }
 
     return NextResponse.json({
-      period_label: periodo === "all" ? "Todo Histórico" : periodo,
-      source_file: "supabase",
+      period: periodo,
       last_update: new Date().toISOString(),
-      stats: {
-        total_custo, trend_custo: 0,
-        ticket_medio, trend_ticket: 0,
-        qtd_servicos, trend_servicos: 0,
-        total_frota, trend_frota: 0
-      },
-      pareto,
-      history,
+      stats: { total_custo, total_veiculos, media_por_veiculo, total_manutencoes },
       regionais,
-      fornecedores,
+      setores,
       manutencoes,
-      idades,
-      top_offenders,
-      custo_medio_tipo,
-      custo_medio_setor,
-      top_servicos,
-      matrix,
+      top_veiculos,
+      evolucao: [],
       insights
     })
   } catch (err: any) {

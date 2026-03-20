@@ -1,27 +1,22 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange, getPrevDateRange } from "@/lib/dateRange"
+import { safeFetch } from "@/lib/apiFetcher"
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const periodo = searchParams.get("periodo") || "month"
-    const view = searchParams.get("view") || "equipe"
 
     const { startDate, endDate } = getDateRange(periodo)
     const { startDate: prevStart, endDate: prevEnd } = getPrevDateRange(periodo)
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001/api/v1"
 
-    const [currRes, prevRes, configRes] = await Promise.all([
-      fetch(`${API_URL}/proxy/produtividade_records?data.gte=${startDate}&data.lte=${endDate}`, { cache: "no-store" }),
-      fetch(`${API_URL}/proxy/produtividade_records?data.gte=${prevStart}&data.lte=${prevEnd}&select=produtividade_pct`, { cache: "no-store" }),
-      fetch(`${API_URL}/proxy/system_configs?key=meta_produtividade`, { cache: "no-store" }),
+    const [data, prev, configData] = await Promise.all([
+      safeFetch<any[]>(`/proxy/produtividade_records?data.gte=${startDate}&data.lte=${endDate}`, []),
+      safeFetch<any[]>(`/proxy/produtividade_records?data.gte=${prevStart}&data.lte=${prevEnd}&select=produtividade_pct`, []),
+      safeFetch<any[]>(`/proxy/system_configs?key=meta_produtividade`, []),
     ])
 
-    const data = currRes.ok ? await currRes.json() : []
-    const prev = prevRes.ok ? await prevRes.json() : []
-    const configData = configRes.ok ? await configRes.json() : []
     const configRow = configData.length > 0 ? configData[0] : null
-
     const meta_prod = configRow?.value ? parseFloat(configRow.value) : 85
 
     if (data.length === 0) {

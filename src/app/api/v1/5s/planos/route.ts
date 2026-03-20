@@ -1,26 +1,18 @@
-import { createServiceClient } from "@/lib/supabase/serviceClient"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { safeFetch } from "@/lib/apiFetcher"
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const supabase = createServiceClient()
-    const { data: configRow } = await supabase
-      .from("system_configs")
-      .select("value")
-      .eq("key", "5s_action_plans")
-      .maybeSingle()
+    const { searchParams } = new URL(req.url)
+    const status = searchParams.get("status") || ""
 
-    if (configRow?.value) {
-      try {
-        const action_plans = JSON.parse(configRow.value)
-        return NextResponse.json({ action_plans })
-      } catch {
-        // fall through
-      }
-    }
+    let path = `/proxy/planos_5s`
+    if (status) path += `?status=${encodeURIComponent(status)}`
 
-    return NextResponse.json({ action_plans: [] })
-  } catch {
-    return NextResponse.json({ action_plans: [] }, { status: 200 })
+    const data = await safeFetch<any[]>(path, [])
+
+    return NextResponse.json(data)
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

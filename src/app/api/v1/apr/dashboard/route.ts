@@ -1,154 +1,92 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getDateRange, getPrevDateRange } from "@/lib/dateRange"
+import { getDateRange } from "@/lib/dateRange"
+import { safeFetch } from "@/lib/apiFetcher"
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const sector = searchParams.get("sector") || "CCM"
     const periodo = searchParams.get("periodo") || "month"
 
     const { startDate, endDate } = getDateRange(periodo)
-    const { startDate: prevStart, endDate: prevEnd } = getPrevDateRange(periodo)
-
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001/api/v1"
     
-    // Convertendo as chamadas Supabase SDK para Fetch do backend Python proxy
-    const [currRes, prevRes] = await Promise.all([
-      fetch(`${API_URL}/proxy/apr_records?sector=${encodeURIComponent(sector)}&data.gte=${startDate}&data.lte=${endDate}`, { cache: "no-store" }),
-      fetch(`${API_URL}/proxy/apr_records?sector=${encodeURIComponent(sector)}&data.gte=${prevStart}&data.lte=${prevEnd}&select=efetividade`, { cache: "no-store" })
-    ])
+    const data = await safeFetch<any[]>(`/proxy/apr_records?data.gte=${startDate}&data.lte=${endDate}`, [])
 
-    const data = currRes.ok ? await currRes.json() : []
-    const prev = prevRes.ok ? await prevRes.json() : []
-    const meta = 95
+    if (data.length === 0) {
+      return NextResponse.json({
+        last_update: new Date().toISOString(),
+        period: periodo,
+        stats: { total_aprs: 0, media_fotos: 0, total_comentarios: 0, equipes_ativas: 0, pct_conformidade: 100 },
+        charts: { labels: [], datasets: [] },
+        regionais: [],
+        equipes_stats: [],
+        insights: [{ type: "info", text: "Sem registros de APR para o período selecionado." }]
+      })
+    }
 
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
     const round1 = (n: number) => Math.round(n * 10) / 10
 
-    if (data.length === 0) {
-      return NextResponse.json({
-        sector,
-        period_label: `${startDate} a ${endDate}`,
-        source_file: "supabase",
-        last_update: new Date().toISOString(),
-        meta,
-        stats: { aderencia_global: 0, aderencia_var: 0, equipes_fora_meta: 0, equipes_fora_var: 0, total_equipes: 0, total_equipes_var: 0 },
-        history: { labels: [], values: [] },
-        top_melhores: [],
-        top_piores: [],
-        bases_breakdown: [],
-        insights: [{ type: "info", text: "Sem dados de APR para o período selecionado." }]
-      })
-    }
+    const total_aprs = data.length
+    const total_fotos = data.reduce((a: number, r: any) => a + (r.fotos_count || 0), 0)
+    const media_fotos = total_aprs > 0 ? round1(total_fotos / total_aprs) : 0
+    const total_comentarios = data.reduce((a: number, r: any) => a + (r.comentarios_count || 0), 0)
+    
+    const equipes = [...new Set(data.map((r: any) => r.equipe).filter(Boolean))]
+    const equipes_ativas = equipes.length
 
-    const efetividades = data.map((r: any) => r.efetividade || 0)
-    const aderencia_global = round1(avg(efetividades))
-    const prevEfet = prev.map((r: any) => r.efetividade || 0)
-    const prevAvg = round1(avg(prevEfet))
-    const aderencia_var = prevAvg > 0 ? round1(((aderencia_global - prevAvg) / prevAvg) * 100) : 0
-
-    const equipes = [...new Set(data.map((r: any) => r.equipe).filter(Boolean))] as string[]
-    const total_equipes = equipes.length
-    const equipes_fora_meta = equipes.filter(eq => {
-      const eqRows = data.filter((r: any) => r.equipe === eq)
-      return avg(eqRows.map((r: any) => r.efetividade || 0)) < meta
-    }).length
-
-    // History: group by date
-    const histMap: Record<string, number[]> = {}
+    // Regionais
+    const regionalMap: Record<string, { aprs: number; fotos: number }> = {}
     data.forEach((r: any) => {
-      const d = r.data || ""
-      if (!histMap[d]) histMap[d] = []
-      histMap[d].push(r.efetividade || 0)
+      const key = r.regional || "N/D"
+      if (!regionalMap[key]) regionalMap[key] = { aprs: 0, fotos: 0 }
+      regionalMap[key].aprs++
+      regionalMap[key].fotos += (r.fotos_count || 0)
     })
-    const histDates = Object.keys(histMap).sort()
-    const history = {
-      labels: histDates,
-      values: histDates.map(d => round1(avg(histMap[d])))
-    }
+    const regionais = Object.entries(regionalMap).map(([label, v]) => ({
+      label,
+      aprs: v.aprs,
+      media_fotos: round1(v.fotos / v.aprs)
+    }))
 
-    // Top melhores / piores
-    const regionais = [...new Set(data.map((r: any) => r.setor_name || r.setor || "").filter(Boolean))] as string[]
-    const equipeStats = equipes.map(eq => {
+    // Equipes Stats
+    const equipes_stats = equipes.map(eq => {
       const eqRows = data.filter((r: any) => r.equipe === eq)
-      const regional = eqRows[0]?.setor_name || eqRows[0]?.setor || ""
-      return {
-        equipe: eq,
-        regional,
-        efetividade: round1(avg(eqRows.map((r: any) => r.efetividade || 0)))
-      }
+      const aprs = eqRows.length
+      const fotos = eqRows.reduce((a: number, r: any) => a + (r.fotos_count || 0), 0)
+      const regional = eqRows[0]?.regional || ""
+      return { equipe: eq, regional, aprs, media_fotos: round1(fotos / aprs) }
+    }).sort((a, b) => b.aprs - a.aprs)
+
+    // Daily History Chart
+    const histMap: Record<string, number> = {}
+    data.forEach((r: any) => {
+      const d = r.data ? r.data.split("T")[0] : "N/D"
+      histMap[d] = (histMap[d] || 0) + 1
     })
-    const sortedByEf = [...equipeStats].sort((a, b) => b.efetividade - a.efetividade)
-    const top_melhores = sortedByEf.slice(0, 10)
-    const top_piores = [...sortedByEf].reverse().slice(0, 10)
-
-    // Bases breakdown
-    const bases_breakdown = regionais.map(reg => {
-      const regRows = data.filter((r: any) => (r.setor_name || r.setor || "") === reg)
-      const regEquipes = [...new Set(regRows.map((r: any) => r.equipe).filter(Boolean))] as string[]
-
-      // Sparkline by date
-      const regHistMap: Record<string, number[]> = {}
-      regRows.forEach((r: any) => {
-        const d = r.data || ""
-        if (!regHistMap[d]) regHistMap[d] = []
-        regHistMap[d].push(r.efetividade || 0)
-      })
-      const regDates = Object.keys(regHistMap).sort()
-      const sparkline = regDates.map(d => ({ name: d, value: round1(avg(regHistMap[d])) }))
-      const last_result = sparkline.length > 0 ? sparkline[sparkline.length - 1].value : 0
-
-      const equipes_meta = regEquipes.filter(eq => {
-        const eqR = regRows.filter((r: any) => r.equipe === eq)
-        return avg(eqR.map((r: any) => r.efetividade || 0)) >= meta
-      }).length
-
-      const top_offenders = regEquipes.map(eq => {
-        const eqR = regRows.filter((r: any) => r.equipe === eq)
-        return { equipe: eq, efetividade: round1(avg(eqR.map((r: any) => r.efetividade || 0))) }
-      }).sort((a, b) => a.efetividade - b.efetividade)
-
-      return {
-        name: reg,
-        last_result,
-        efetividade_str: `${last_result}%`,
-        total_equipes: regEquipes.length,
-        equipes_meta,
-        equipes_fora: regEquipes.length - equipes_meta,
-        sparkline,
-        top_offenders
-      }
-    })
+    const sortedDates = Object.keys(histMap).sort()
+    const charts = {
+      labels: sortedDates,
+      datasets: [{ label: "APRs Enviadas", data: sortedDates.map(d => histMap[d]) }]
+    }
 
     // Insights
     const insights = []
-    if (aderencia_global >= meta) {
-      insights.push({ type: "destaque", text: `Aderência global de ${aderencia_global}% atinge a meta de ${meta}%.` })
+    if (media_fotos < 4) {
+      insights.push({ type: "warning", text: `Média de fotos por APR (${media_fotos}) está abaixo do padrão recomendado (5).` })
     } else {
-      insights.push({ type: "preocupacao", text: `Aderência de ${aderencia_global}% abaixo da meta de ${meta}%. ${equipes_fora_meta} equipes precisam de atenção.` })
+      insights.push({ type: "success", text: `Engajamento fotográfico satisfatório: ${media_fotos} fotos/APR.` })
     }
-    if (top_piores.length > 0) {
-      insights.push({ type: "alerta", text: `${top_piores[0].equipe} com efetividade de ${top_piores[0].efetividade}% requer intervenção imediata.` })
+    if (total_comentarios === 0) {
+      insights.push({ type: "danger", text: "Nenhum comentário registrado nas APRs — verificar profundidade da análise." })
     }
 
     return NextResponse.json({
-      sector,
-      period_label: `${startDate} a ${endDate}`,
-      source_file: "supabase",
       last_update: new Date().toISOString(),
-      meta,
-      stats: {
-        aderencia_global,
-        aderencia_var,
-        equipes_fora_meta,
-        equipes_fora_var: 0,
-        total_equipes,
-        total_equipes_var: 0
-      },
-      history,
-      top_melhores,
-      top_piores,
-      bases_breakdown,
+      period: periodo,
+      stats: { total_aprs, media_fotos, total_comentarios, equipes_ativas, pct_conformidade: 100 },
+      charts,
+      regionais,
+      equipes_stats,
       insights
     })
   } catch (err: any) {

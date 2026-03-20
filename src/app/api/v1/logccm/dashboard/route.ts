@@ -1,25 +1,19 @@
 import { NextResponse } from "next/server"
+import { safeFetch } from "@/lib/apiFetcher"
 
 export async function GET() {
   try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001/api/v1"
-
     const [
-      currMb52,
-      currItem,
-      currRuptura,
-      currSerial
+      mb52,
+      items,
+      rupturas,
+      seriais
     ] = await Promise.all([
-      fetch(`${API_URL}/proxy/logccm_mb52`, { cache: "no-store" }),
-      fetch(`${API_URL}/proxy/logccm_item`, { cache: "no-store" }),
-      fetch(`${API_URL}/proxy/logccm_ruptura`, { cache: "no-store" }),
-      fetch(`${API_URL}/proxy/logccm_serial`, { cache: "no-store" }),
+      safeFetch<any[]>("/proxy/logccm_mb52", []),
+      safeFetch<any[]>("/proxy/logccm_item", []),
+      safeFetch<any[]>("/proxy/logccm_ruptura", []),
+      safeFetch<any[]>("/proxy/logccm_serial", []),
     ])
-
-    const mb52 = currMb52.ok ? await currMb52.json() : []
-    const items = currItem.ok ? await currItem.json() : []
-    const rupturas = currRuptura.ok ? await currRuptura.json() : []
-    const seriais = currSerial.ok ? await currSerial.json() : []
 
     const round2 = (n: number) => Math.round(n * 100) / 100
 
