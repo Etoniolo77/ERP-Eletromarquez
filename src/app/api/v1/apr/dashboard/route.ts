@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const { startDate, endDate } = getDateRange(periodo)
     const { startDate: prevStart, endDate: prevEnd } = getPrevDateRange(periodo)
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1"
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001/api/v1"
     
     // Convertendo as chamadas Supabase SDK para Fetch do backend Python proxy
     const [currRes, prevRes] = await Promise.all([

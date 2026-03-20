@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const base = searchParams.get("base") || ""
 
     const { startDate, endDate } = getDateRange(periodo)
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1"
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001/api/v1"
 
     let endpoint = `${API_URL}/proxy/auditorias_5s?data_auditoria.gte=${startDate}&data_auditoria.lte=${endDate}`
     if (base && base !== "Todas") {

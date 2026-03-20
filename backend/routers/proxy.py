@@ -96,7 +96,7 @@ def list_produtividade_records(
     for r in results:
         data_dict = {
             "id": r.id, "data": r.data.strftime("%Y-%m-%d") if r.data else None,
-            "equipe": r.equipe, "regional": r.regional, "csd": r.csd, "setor": r.setor,
+            "equipe": r.equipe, "csd": r.csd, "setor": r.setor,
             "produtividade_pct": float(r.produtividade_pct) if r.produtividade_pct else 0.0,
             "ociosidade_min": float(r.ociosidade_min) if r.ociosidade_min else 0.0,
             "desvios_min": float(r.desvios_min) if r.desvios_min else 0.0,

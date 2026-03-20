@@ -1,35 +1,48 @@
 import { createServiceClient } from "@/lib/supabase/serviceClient"
 import { NextRequest, NextResponse } from "next/server"
+import { getDateRange, getPrevDateRange } from "@/lib/dateRange"
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const periodo = searchParams.get("periodo") || "all"
+    const periodo = searchParams.get("periodo") || "month"
     const sector = searchParams.get("sector") || ""
     const regional = searchParams.get("regional") || ""
 
     const supabase = createServiceClient()
+    const { startDate, endDate } = getDateRange(periodo)
 
     let query = supabase.from("frota_custos").select("*")
 
-    if (periodo && periodo !== "all") {
-      // periodo can be "MM/YYYY"
-      const parts = periodo.split("/")
-      if (parts.length === 2) {
-        const [mm, yyyy] = parts
-        const firstDay = `${yyyy}-${mm.padStart(2, '0')}-01`
-        const lastDay = new Date(parseInt(yyyy), parseInt(mm), 0)
-        const lastDayStr = `${yyyy}-${mm.padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
-        query = query.gte("data_solicitacao", firstDay).lte("data_solicitacao", lastDayStr)
-      }
+    if (periodo !== "all") {
+      query = query.gte("data_solicitacao", startDate).lte("data_solicitacao", endDate)
     }
 
     if (sector) query = query.eq("setor", sector)
     if (regional) query = query.eq("regional", regional)
 
-    const { data: rows } = await query
+    let { data: rows } = await query
+    let currentData = rows || []
 
-    const data = rows || []
+    // Fallback: se o período atual não tem dados (comum para Frota), buscar o último mês disponível
+    if (currentData.length === 0 && (periodo === "month" || periodo === "latest")) {
+        const { data: latestRow } = await supabase.from("frota_custos").select("data_solicitacao").order("data_solicitacao", { ascending: false }).limit(1).single()
+        if (latestRow?.data_solicitacao) {
+            const lastDate = new Date(latestRow.data_solicitacao)
+            const firstDay = `${lastDate.getFullYear()}-${String(lastDate.getMonth() + 1).padStart(2, '0')}-01`
+            const lastDay = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, 0)
+            const lastDayStr = `${lastDate.getFullYear()}-${String(lastDate.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
+            
+            let fbQuery = supabase.from("frota_custos").select("*").gte("data_solicitacao", firstDay).lte("data_solicitacao", lastDayStr)
+            if (sector) fbQuery = fbQuery.eq("setor", sector)
+            if (regional) fbQuery = fbQuery.eq("regional", regional)
+            
+            const { data: fbRows } = await fbQuery
+            currentData = fbRows || []
+        }
+    }
+
+    const data = currentData
 
     const round1 = (n: number) => Math.round(n * 10) / 10
     const round2 = (n: number) => Math.round(n * 100) / 100

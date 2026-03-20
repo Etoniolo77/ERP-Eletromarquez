@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const view = searchParams.get("view") || "dia"
 
     const { startDate, endDate } = getDateRange(periodo)
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1"
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001/api/v1"
 
     const res = await fetch(`${API_URL}/proxy/saida_base_records?data.gte=${startDate}&data.lte=${endDate}`, { cache: "no-store" })
     const data = res.ok ? await res.json() : []
