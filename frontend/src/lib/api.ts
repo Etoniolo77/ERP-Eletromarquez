@@ -16,7 +16,7 @@ const getBaseURL = () => {
     }
 
     // 3. Fallback padrão para ambiente local
-    return "http://127.0.0.1:8000/api/v1";
+    return "http://127.0.0.1:8001/api/v1";
 };
 
 const api = axios.create({

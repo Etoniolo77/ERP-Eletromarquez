@@ -2,5 +2,5 @@
 cd /d "%~dp0"
 if exist venv\Scripts\activate.bat call venv\Scripts\activate.bat
 echo Backend iniciando em %CD%...
-uvicorn main:app --host 127.0.0.1 --port 8001 --reload
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 pause

@@ -6,6 +6,7 @@ import { triggerSync } from "@/lib/sync"
 import { EvolucaoLineChart } from "@/components/dashboard/EvolucaoLineChart"
 import { KpiCard } from "@/components/dashboard/KpiCard"
 import { RefreshButton } from "@/components/ui/RefreshButton"
+import { useFilter } from "@/components/providers/FilterProvider"
 
 import { PageHeader } from "@/components/dashboard/PageHeader"
 
@@ -79,7 +80,7 @@ export default function Page5SControle() {
     const [planos, setPlanos] = useState<PlanoAcaoRow[]>([])
 
     // Filter States
-    const [periodo, setPeriodo] = useState<string>("month")
+    const { period: periodo } = useFilter()
     const [selectedBases, setSelectedBases] = useState<string[]>([])
     const [openBase, setOpenBase] = useState<string | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
@@ -362,33 +363,30 @@ export default function Page5SControle() {
                 lastUpdate={dashData?.last_update}
                 onRefresh={() => activeTab === 'dashboard' ? loadDashboard(true) : activeTab === 'historico' ? loadHistorico(true) : loadPlanos(true)}
                 loading={loading}
+                showPeriodSelector={true}
+                tabs={[
+                    { id: 'dashboard', label: '5S Dashboard', icon: 'auto_awesome' },
+                    { id: 'historico', label: 'Histórico 5S', icon: 'history' },
+                    { id: 'planos', label: 'Plano de Ação', icon: 'assignment' }
+                ]}
+                activeTab={activeTab}
+                onTabChange={(id) => {
+                    setActiveTab(id)
+                    setSearchTerm("")
+                }}
             >
-                {/* Filtro de Período */}
-                <div className="flex items-center gap-2 bg-surface border border-border px-3 py-1.5 rounded-sm shadow-sm h-[32px]">
-                    <span className="material-symbols-outlined text-[16px] text-primary">calendar_month</span>
-                    <select
-                        value={periodo}
-                        onChange={(e) => setPeriodo(e.target.value)}
-                        className="bg-transparent border-none outline-none text-[10px] font-bold uppercase tracking-widest text-text-heading cursor-pointer min-w-[80px]"
-                    >
-                        <option value="day">Dia</option>
-                        <option value="week">Semana</option>
-                        <option value="month">Mês</option>
-                    </select>
-                </div>
-
                 {/* Filtro de Base (Multi-seleção simplificada) */}
-                <div className="relative group">
-                    <div className="flex items-center gap-2 bg-surface border border-border px-3 py-1.5 rounded-sm shadow-sm cursor-pointer min-w-[140px] h-[32px]">
+                <div className="relative group self-center h-[34px]">
+                    <div className="flex items-center gap-2 bg-background border border-border/80 px-3 py-1.5 rounded-sm shadow-sm cursor-pointer min-w-[140px] h-full hover:border-primary/50 transition-colors">
                         <span className="material-symbols-outlined text-[16px] text-primary">location_on</span>
                         <span className="text-[10px] font-bold uppercase tracking-widest text-text-heading truncate max-w-[100px]">
                             {selectedBases.length === 0 ? "Todas Bases" : selectedBases.length === 1 ? selectedBases[0] : `${selectedBases.length} Bases`}
                         </span>
-                        <span className="material-symbols-outlined text-[14px] text-text-muted">expand_more</span>
+                        <span className="material-symbols-outlined text-[14px] text-text-muted ml-auto">expand_more</span>
                     </div>
 
                     {/* Dropdown de Bases */}
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-surface border border-border shadow-xl rounded-sm py-2 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200">
+                    <div className="absolute right-0 top-full mt-1 w-56 bg-surface border border-border shadow-xl rounded-sm py-2 z-[99] invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200 origin-top">
                         <div className="px-3 py-1 border-b border-border mb-1">
                             <button
                                 onClick={() => setSelectedBases([])}
@@ -399,7 +397,7 @@ export default function Page5SControle() {
                         </div>
                         <div className="max-h-60 overflow-y-auto custom-scrollbar">
                             {(dashData?.all_bases || []).map(b => (
-                                <label key={b} className="flex items-center gap-2 px-3 py-1.5 hover:bg-primary/5 cursor-pointer">
+                                <label key={b} className="flex items-center gap-2 px-3 py-2 hover:bg-primary/5 cursor-pointer">
                                     <input
                                         type="checkbox"
                                         checked={selectedBases.includes(b)}
@@ -418,27 +416,7 @@ export default function Page5SControle() {
                 </div>
             </PageHeader>
 
-            {/* Tabs Navigation */}
-            <div className="flex items-center gap-8 border-b border-border px-2 pt-2">
-                {[
-                    { id: 'dashboard', label: '5S Dashboard', icon: 'auto_awesome' },
-                    { id: 'historico', label: 'Histórico 5S', icon: 'history' },
-                    { id: 'planos', label: 'Plano de Ação', icon: 'assignment' }
-                ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => {
-                            setActiveTab(tab.id)
-                            setSearchTerm("")
-                        }}
-                        className={`flex items-center gap-2 pb-3 text-[12px] font-semibold uppercase tracking-widest transition-all relative ${activeTab === tab.id ? 'text-primary' : 'text-text-muted hover:text-text-heading'}`}
-                    >
-                        <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
-                        {tab.label}
-                        {activeTab === tab.id && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary animate-in fade-in duration-300" />}
-                    </button>
-                ))}
-            </div>
+            {/* Dashboard Content */}
 
             {/* Render Content Based on Active Tab */}
             <main className="min-h-[600px] animate-in fade-in duration-500">

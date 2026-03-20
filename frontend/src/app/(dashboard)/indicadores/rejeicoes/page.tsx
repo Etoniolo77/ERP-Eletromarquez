@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/dashboard/PageHeader"
 import { DashboardSkeleton } from "@/components/ui/PageSkeleton"
 import { PageError } from "@/components/ui/PageError"
 import { EmptyState } from "@/components/ui/EmptyState"
+import { useFilter } from "@/components/providers/FilterProvider"
 
 interface RejeicoesDashboard {
     period_label: string
@@ -41,7 +42,7 @@ const PERIOD_OPTIONS = [
 ]
 
 export default function RejeicoesPage() {
-    const [period, setPeriod] = useState<string>("month")
+    const { period } = useFilter()
     const [data, setData] = useState<RejeicoesDashboard | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -111,25 +112,8 @@ export default function RejeicoesPage() {
                 lastUpdate={data.last_update}
                 onRefresh={() => loadData(true)}
                 loading={loading}
+                showPeriodSelector={true}
             />
-
-            {/* Period Selector */}
-            <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px] text-text-muted">calendar_month</span>
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Período:</span>
-                <div className="flex items-center gap-1">
-                    {PERIOD_OPTIONS.map(opt => (
-                        <button
-                            key={opt.value}
-                            onClick={() => setPeriod(opt.value)}
-                            className={`px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all ${period === opt.value ? 'bg-primary text-white shadow-sm' : 'bg-surface border border-border text-text-muted hover:border-primary hover:text-primary'}`}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-                </div>
-                {loading && <span className="text-[9px] text-text-muted animate-pulse uppercase tracking-widest ml-2">Carregando...</span>}
-            </div>
 
             {/* KPI Grid */}
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">

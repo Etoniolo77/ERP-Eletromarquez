@@ -1,7 +1,7 @@
 import api from "./api";
 
 // Módulos com processamento pesado que exigem timeout estendido
-const HEAVY_MODULES = ["logccm", "all", "5s"];
+const HEAVY_MODULES = ["logccm", "all", "5s", "apr", "indisponibilidade", "saida_base"];
 const HEAVY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos
 
 /**

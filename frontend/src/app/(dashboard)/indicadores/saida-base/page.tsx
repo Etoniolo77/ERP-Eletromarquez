@@ -26,11 +26,13 @@ interface SaidaBaseDashboard {
         total_equipes: number
         pct_conformidade: number
         ritmo_comparativo: number
+        indice_ipe: number
+        total_equipes_periodo: number
     }
     insights: { type: 'success' | 'warning' | 'danger' | 'info', text: string }[]
     custo_projetado: number
     maiores_ofensores_equipes: { equipe: string, setor: string, minutos: number, valor_rs: number }[]
-    maiores_ofensores_setor: { label: string, minutos: number, valor_rs: number }[]
+    maiores_ofensores_setor: { label: string, minutos: number, valor_rs: number, percent: number }[]
     maiores_motivos: { label: string, count: number, percent: number, valor_rs: number }[]
     evolucao_semanal: {
         melhoraram: { equipe: string, setor: string, regional: string, variacao_pct: number, semana_atual: number, semana_anterior: number }[]
@@ -122,6 +124,7 @@ export default function SaidaBasePage() {
                 lastUpdate={data.last_update}
                 onRefresh={() => loadData(trendView, true)}
                 loading={loading}
+                showPeriodSelector={true}
             />
 
             {/* Top KPIs - 4 Columns */}
@@ -132,6 +135,7 @@ export default function SaidaBasePage() {
                     variation={data.stats.ritmo_comparativo}
                     target={`${data.meta}m`}
                     icon="schedule"
+                    subtitle={data.period_label}
                 />
                 <KpiCard
                     title="Aderência"
@@ -139,13 +143,15 @@ export default function SaidaBasePage() {
                     variation={data.stats.pct_conformidade}
                     target={data.stats.total_equipes.toString()}
                     icon="fact_check"
+                    subtitle={data.period_label}
                 />
                 <KpiCard
-                    title="Equipes na Meta"
-                    value={data.stats.equipes_dentro_meta.toString()}
-                    variation={data.stats.pct_conformidade}
-                    target={`de ${data.stats.total_equipes} equipes`}
-                    icon="package_2"
+                    title="IPE (Índice Produtiva)"
+                    value={`${data.stats.indice_ipe}%`}
+                    variation={data.stats.total_equipes_periodo}
+                    target={`Universo: ${data.stats.total_equipes_periodo} eq.`}
+                    icon="trending_up"
+                    subtitle={data.period_label}
                 />
                 <KpiCard
                     title="Risco Projetado"
@@ -153,6 +159,7 @@ export default function SaidaBasePage() {
                     variation={2.4}
                     target="R$ 0"
                     icon="warning"
+                    subtitle={data.period_label}
                 />
             </div>
 
@@ -160,7 +167,7 @@ export default function SaidaBasePage() {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
 
                 {/* Historico Chart Area - 8 Columns */}
-                <div className="md:col-span-8 bg-surface border border-border p-4 rounded-sm flex flex-col h-[420px]">
+                <div className="md:col-span-8 bg-surface border border-border p-4 rounded-sm flex flex-col h-[420px] shadow-sm transition-all hover:border-primary/30">
                     <div className="flex justify-between items-start mb-8">
                         <div>
                             <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Tendência Regional de Saída</h3>
@@ -205,14 +212,14 @@ export default function SaidaBasePage() {
                 </div>
 
                 {/* Top Ofensores List - 4 Columns */}
-                <div className="md:col-span-4 bg-surface border border-border rounded-sm flex flex-col h-[420px]">
+                <div className="md:col-span-4 bg-surface border border-border rounded-sm flex flex-col h-[420px] shadow-sm transition-all hover:border-rose-500/30">
                     <div className="px-4 py-2 border-b border-border flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined text-rose-500 text-[18px]">trending_down</span>
                             <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Ofensores de Custo</h3>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-semibold text-rose-500 uppercase tracking-tighter">Top 5</span>
+                            <span className="text-[9px] font-semibold text-rose-500 uppercase tracking-tighter">Top 7</span>
                             <CSVExportButton data={sortedOfensores as Record<string, unknown>[]} filename="ofensores_saida_base" />
                         </div>
                     </div>
@@ -227,7 +234,7 @@ export default function SaidaBasePage() {
                             </thead>
                             <tbody className="divide-y divide-border text-[11px]">
                                 {sortedOfensores && sortedOfensores.length > 0 ? (
-                                    sortedOfensores.slice(0, 5).map((eq, i) => (
+                                    sortedOfensores.slice(0, 7).map((eq, i) => (
                                         <tr key={i} className="hover:bg-surface/50 transition-colors">
                                             <td className="p-2 pl-4">
                                                 <p className="font-medium text-text-heading uppercase tracking-tight">{eq.equipe}</p>
@@ -258,7 +265,7 @@ export default function SaidaBasePage() {
             {/* Row 3: Motivos & Detalhamento */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 {/* Motivos Chart - 5 Columns */}
-                <div className="md:col-span-5 bg-surface border border-border p-4 rounded-sm flex flex-col h-[400px]">
+                <div className="md:col-span-5 bg-surface border border-border p-4 rounded-sm flex flex-col h-[400px] shadow-sm transition-all hover:border-primary/30">
                     <div className="flex items-center gap-2 mb-6">
                         <span className="material-symbols-outlined text-primary text-[18px]">bar_chart</span>
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Frequência de Motivos</h3>
@@ -270,9 +277,9 @@ export default function SaidaBasePage() {
                                 <YAxis dataKey="label" type="category" axisLine={false} tickLine={false} width={100} tick={{ fontSize: 10, fontWeight: 500, fill: 'var(--text-muted)' }} />
                                 <Bar dataKey="percent" fill="#1152d4" radius={[0, 2, 2, 0]} barSize={16}>
                                     {data.maiores_motivos?.slice(0, 6).map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={index === 0 ? '#0b50da' : '#1152d4'} fillOpacity={1 - index * 0.12} />
+                                        <Cell key={`cell-${index}`} fill={index === 0 ? '#0b50da' : '#1152d4'} />
                                     ))}
-                                    <LabelList dataKey="percent" position="right" formatter={(v: any) => `${Number(v).toFixed(1)}%`} style={{ fontSize: 9, fontWeight: 600, fill: 'var(--text-heading)' }} />
+                                    <LabelList dataKey="percent" position="right" offset={10} formatter={(v: any) => `${Number(v).toFixed(1)}%`} style={{ fontSize: 9, fontWeight: 700, fill: 'var(--text-heading)' }} />
                                 </Bar>
                                 <Tooltip contentStyle={{ borderRadius: '2px', border: '1px solid var(--border)', backgroundColor: 'var(--surface)', fontSize: '9px', textTransform: 'uppercase', fontWeight: 600 }} />
                             </BarChart>
@@ -281,7 +288,7 @@ export default function SaidaBasePage() {
                 </div>
 
                 {/* Setores Ofensores - 3 Columns */}
-                <div className="md:col-span-3 bg-surface border border-border rounded-sm flex flex-col h-[400px]">
+                <div className="md:col-span-3 bg-surface border border-border rounded-sm flex flex-col h-[400px] shadow-sm transition-all hover:border-amber-500/30">
                     <div className="px-4 py-2 border-b border-border flex items-center gap-2">
                         <span className="material-symbols-outlined text-amber-500 text-[18px]">domain</span>
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Setores Ofensores</h3>
@@ -291,6 +298,7 @@ export default function SaidaBasePage() {
                             <thead className="bg-surface/50 text-[9px] font-semibold uppercase text-text-muted">
                                 <tr>
                                     <th className="p-2 pl-4">Setor</th>
+                                    <th className="p-2 text-right">Prc. (%)</th>
                                     <th className="p-2 text-right pr-4">Impacto</th>
                                 </tr>
                             </thead>
@@ -299,6 +307,7 @@ export default function SaidaBasePage() {
                                     data.maiores_ofensores_setor.slice(0, 6).map((s, i) => (
                                         <tr key={i} className="hover:bg-surface/50 transition-colors">
                                             <td className="p-2 pl-4 font-medium text-text-heading uppercase tracking-tight">{s.label}</td>
+                                            <td className="p-2 text-right text-text-muted/80 font-semibold">{s.percent}%</td>
                                             <td className="p-2 text-right pr-4">
                                                 <p className="font-semibold text-rose-500 tabular-nums">{formatCurrency(s.valor_rs)}</p>
                                                 <p className="text-[9px] text-text-muted font-medium">{Math.round(s.minutos)}m</p>
@@ -307,7 +316,7 @@ export default function SaidaBasePage() {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={2} className="p-0">
+                                        <td colSpan={3} className="p-0">
                                             <EmptyState icon="payments" title="Sem dados de custo" description="Nenhum setor ofensor identificado neste período." />
                                         </td>
                                     </tr>
@@ -319,7 +328,7 @@ export default function SaidaBasePage() {
 
                 {/* Pioras/Melhorias - 4 Columns split */}
                 <div className="md:col-span-4 grid grid-rows-2 gap-6 h-[400px]">
-                    <div className="bg-surface border border-border rounded-sm flex flex-col overflow-hidden">
+                    <div className="bg-surface border border-border rounded-sm flex flex-col overflow-hidden shadow-sm transition-all hover:border-emerald-500/30">
                         <div className="px-4 py-2 border-b border-border flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <span className="material-symbols-outlined text-emerald-500 text-[18px]">trending_up</span>
@@ -334,7 +343,7 @@ export default function SaidaBasePage() {
                                         data.evolucao_semanal.melhoraram.slice(0, 4).map((eq, i) => (
                                             <tr key={i} className="hover:bg-surface/50 transition-colors">
                                                 <td className="p-2 pl-4 font-medium text-text-heading uppercase tracking-tight truncate max-w-[200px]">{eq.equipe}</td>
-                                                <td className="p-2 text-right pr-4 font-semibold text-emerald-500 tabular-nums">-{eq.variacao_pct}%</td>
+                                                <td className="p-2 text-right pr-4 font-semibold text-emerald-500 tabular-nums">{Math.abs(eq.variacao_pct)}%</td>
                                             </tr>
                                         ))
                                     ) : (
@@ -348,7 +357,7 @@ export default function SaidaBasePage() {
                             </table>
                         </div>
                     </div>
-                    <div className="bg-surface border border-border rounded-sm flex flex-col overflow-hidden">
+                    <div className="bg-surface border border-border rounded-sm flex flex-col overflow-hidden shadow-sm transition-all hover:border-rose-500/30">
                         <div className="px-4 py-2 border-b border-border flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <span className="material-symbols-outlined text-rose-500 text-[18px]">trending_down</span>
@@ -389,7 +398,7 @@ export default function SaidaBasePage() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {data.bases_breakdown?.map((reg, idx) => (
-                        <div key={idx} className="bg-surface border border-border rounded-sm p-5 shadow-sm flex flex-col gap-3 relative overflow-hidden group hover:border-primary/30 transition-all">
+                        <div key={idx} className="bg-surface border border-border rounded-sm p-5 shadow-sm flex flex-col gap-3 relative overflow-hidden group hover:border-primary/40 transition-all">
                             {/* Card Header */}
                             <div className="flex justify-between items-start">
                                 <div className="flex flex-col gap-0.5">
@@ -411,12 +420,6 @@ export default function SaidaBasePage() {
                                 <div className="h-[150px] w-full -ml-4">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={reg.trend_data?.map((v, i) => ({ name: reg.trend_labels?.[i] || '', value: v })) || []} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                                            <defs>
-                                                <linearGradient id={`grad-reg-${idx}`} x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#ff7849" stopOpacity={0.15} />
-                                                    <stop offset="95%" stopColor="#ff7849" stopOpacity={0.01} />
-                                                </linearGradient>
-                                            </defs>
                                             <CartesianGrid stroke="#f1f5f9" vertical={true} horizontal={true} strokeDasharray="0" />
                                             <XAxis
                                                 dataKey="name"
@@ -450,8 +453,8 @@ export default function SaidaBasePage() {
                                                 dataKey="value"
                                                 stroke="#ff7849"
                                                 strokeWidth={2}
-                                                fillOpacity={1}
-                                                fill={`url(#grad-reg-${idx})`}
+                                                fillOpacity={0.1}
+                                                fill="#ff7849"
                                                 dot={{ r: 3, fill: '#fff', strokeWidth: 2, stroke: '#ff7849' }}
                                                 activeDot={{ r: 4, strokeWidth: 0, fill: '#ff7849' }}
                                             />

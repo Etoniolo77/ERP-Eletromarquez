@@ -18,7 +18,7 @@ export function SortableHeader({
             className={`p-3 cursor-pointer select-none group ${className}`}
             onClick={() => onSort(sortKey)}
         >
-            <span className="flex items-center gap-1">
+            <span className={`flex items-center gap-1 ${className.includes('text-right') ? 'justify-end' : ''}`}>
                 <span>{label}</span>
                 <span className={`material-symbols-outlined text-[12px] transition-colors ${isActive ? "text-primary" : "text-text-muted/30 group-hover:text-text-muted/60"}`}>
                     {icon}

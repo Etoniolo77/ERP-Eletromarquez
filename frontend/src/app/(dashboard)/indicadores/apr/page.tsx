@@ -123,25 +123,15 @@ export default function AprDigitalPage() {
                 lastUpdate={data.last_update}
                 onRefresh={() => loadData(true)}
                 loading={loading}
-            />
-
-            {/* Tabs Navigation */}
-            <div className="flex items-center gap-8 border-b border-border px-2 pt-2">
-                {[
+                showPeriodSelector={true}
+                tabs={[
                     { id: 'CCM', label: 'CCM', icon: 'settings_input_component' },
                     { id: 'TURMAS', label: 'TURMAS', icon: 'groups' }
-                ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setSector(tab.id)}
-                        className={`flex items-center gap-2 pb-3 text-[11px] font-semibold uppercase tracking-widest transition-all relative ${sector === tab.id ? 'text-primary' : 'text-text-muted hover:text-text-heading'}`}
-                    >
-                        <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
-                        {tab.label}
-                        {sector === tab.id && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary animate-in fade-in duration-300" />}
-                    </button>
-                ))}
-            </div>
+                ]}
+                activeTab={sector}
+                onTabChange={setSector}
+            />
+
             <div className="grid gap-4 grid-cols-1 md:grid-cols-4">
                 <KpiCard
                     title="Aderência Global"
@@ -324,12 +314,6 @@ export default function AprDigitalPage() {
                                 <div className="h-[150px] w-full -ml-4">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={reg.sparkline} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                                            <defs>
-                                                <linearGradient id={`grad-reg-${idx}`} x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#ff7849" stopOpacity={0.15} />
-                                                    <stop offset="95%" stopColor="#ff7849" stopOpacity={0.01} />
-                                                </linearGradient>
-                                            </defs>
                                             <CartesianGrid stroke="#f1f5f9" vertical={true} horizontal={true} strokeDasharray="0" />
                                             <XAxis
                                                 dataKey="name"
@@ -364,8 +348,8 @@ export default function AprDigitalPage() {
                                                 dataKey="value"
                                                 stroke="#ff7849"
                                                 strokeWidth={2}
-                                                fillOpacity={1}
-                                                fill={`url(#grad-reg-${idx})`}
+                                                fillOpacity={0.1}
+                                                fill="#ff7849"
                                                 dot={{ r: 3, fill: '#fff', strokeWidth: 2, stroke: '#ff7849' }}
                                                 activeDot={{ r: 4, strokeWidth: 0, fill: '#ff7849' }}
                                             />

@@ -156,6 +156,7 @@ export default function IndisponibilidadePage() {
                 lastUpdate={data.last_update}
                 onRefresh={() => loadData(true)}
                 loading={loading}
+                showPeriodSelector={true}
             >
                 {/* Month Selector */}
                 {data.available_months && data.available_months.length > 0 && (
@@ -237,7 +238,7 @@ export default function IndisponibilidadePage() {
                                 />
                                 <Bar dataKey="Valor" radius={[0, 2, 2, 0]} barSize={20}>
                                     {data.pareto.slice(0, 8).map((_, index) => (
-                                        <Cell key={`cell-${index}`} fill={index < 3 ? '#f43f5e' : '#1152d4'} fillOpacity={1 - index * 0.1} />
+                                        <Cell key={`cell-${index}`} fill={index < 3 ? '#f43f5e' : '#1152d4'} />
                                     ))}
                                 </Bar>
                             </BarChart>

@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
+import sync_engine
 from typing import List, Dict, Any
 from pydantic import BaseModel
 import datetime
@@ -99,7 +100,8 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
             return None  # bases não mapeadas são excluídas do gráfico
 
         # Normalização do período
-        if periodo == "latest": periodo = "month"
+        # Se 'latest', pegamos apenas o último dia disponível (Hoje) no banco para mostrar o status atual.
+        if periodo == "latest": periodo = "day"
 
         # Pega a data máxima existente no banco 
         max_date_str = db.query(func.max(models.Produtividade.data)).scalar()
@@ -123,23 +125,28 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
                 
             if periodo == "day":
                 query = query.filter(models.Produtividade.data == max_date)
-                min_date = max_date # Para evitar erros em rotas que dependem de min_date
+                min_date = max_date 
             elif periodo == "week":
                 min_date = max_date - datetime.timedelta(days=7)
                 query = query.filter(models.Produtividade.data >= min_date, models.Produtividade.data <= max_date)
             elif periodo == "month":
-                # Do dia 1º ao max_date
                 min_date = max_date.replace(day=1)
                 query = query.filter(models.Produtividade.data >= min_date, models.Produtividade.data <= max_date)
             elif periodo == "last_month":
-                # Mês fechado anterior
                 first_day_curr = max_date.replace(day=1)
                 max_date_ref = first_day_curr - datetime.timedelta(days=1)
                 min_date = max_date_ref.replace(day=1)
                 query = query.filter(models.Produtividade.data >= min_date, models.Produtividade.data <= max_date_ref)
+                max_date = max_date_ref # Ajusta max_date para o contexto do filtro
+            elif periodo == "year":
+                min_date = max_date.replace(month=1, day=1)
+                query = query.filter(models.Produtividade.data >= min_date, models.Produtividade.data <= max_date)
             else:
-                # Fallback caso venha algo não mapeado
                 min_date = max_date
+        else:
+             # Se não houver dados, garante que não quebre
+             max_date = datetime.date.today()
+             min_date = max_date
         
         
         # 1. KPIs Atuais
@@ -151,6 +158,7 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
             func.avg(models.Produtividade.retorno_base_min).label('media_retorno_base'),
             func.sum(models.Produtividade.hora_extra_min).label('total_hora_extra'),
             func.sum(models.Produtividade.desvios_min).label('total_desvios'),
+            func.avg(models.Produtividade.desvios_min).label('media_desvios'),
             func.count(func.distinct(models.Produtividade.equipe)).label('total_equipes'),
             func.avg(models.Produtividade.eficacia_pct).label('media_eficacia'),
             func.sum(models.Produtividade.notas_executadas).label('total_notas')
@@ -161,21 +169,27 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
         if sector:
             query_prev = query_prev.filter(models.Produtividade.setor.ilike(f"%{sector}%"))
             
+        prev_min = None
+        prev_max = None
         if max_date:
             if periodo == "day":
                 prev_date = max_date - datetime.timedelta(days=1)
-                query_prev = query_prev.filter(models.Produtividade.data == prev_date)
+                prev_min = prev_date
+                prev_max = prev_date
             elif periodo == "week":
-                prev_min = (min_date or max_date) - datetime.timedelta(days=7)
-                prev_max = max_date - datetime.timedelta(days=7)
-                query_prev = query_prev.filter(models.Produtividade.data >= prev_min, models.Produtividade.data <= prev_max)
-            elif periodo == "month":
-                prev_max = (min_date or max_date) - datetime.timedelta(days=1)
+                prev_max = min_date - datetime.timedelta(days=1)
+                prev_min = prev_max - datetime.timedelta(days=7)
+            elif periodo == "month" or periodo == "last_month":
+                prev_max = min_date - datetime.timedelta(days=1)
                 prev_min = prev_max.replace(day=1)
-                query_prev = query_prev.filter(models.Produtividade.data >= prev_min, models.Produtividade.data <= prev_max)
-            elif periodo == "last_month":
-                prev_max = (min_date or max_date) - datetime.timedelta(days=1)
-                prev_min = prev_max.replace(day=1)
+            elif periodo == "year":
+                prev_max = min_date - datetime.timedelta(days=1)
+                prev_min = prev_max.replace(month=1, day=1)
+            else:
+                prev_min = max_date - datetime.timedelta(days=30) # Fallback
+                prev_max = max_date
+            
+            if prev_min and prev_max:
                 query_prev = query_prev.filter(models.Produtividade.data >= prev_min, models.Produtividade.data <= prev_max)
         
         kpis_prev = query_prev.with_entities(
@@ -185,24 +199,32 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
             func.avg(models.Produtividade.retorno_base_min).label('media_retorno_base')
         ).first()
         
+        # 1.1 Extração de Valores e Cálculo de Tendência (pp ou min)
+        # Produtividade / Ocupação
         curr_prod = float(kpis.media_prod if kpis and kpis.media_prod is not None else 0)
         prev_prod = float(kpis_prev.media_prod if kpis_prev and kpis_prev.media_prod is not None else 0)
-        trend_prod = round(curr_prod - prev_prod, 1) if prev_prod else 0.0
+        trend_prod = round(curr_prod - prev_prod, 1)
 
         is_ccm = sector and "CCM" in sector.upper()
         
         if is_ccm:
+            # Ociosidade
             curr_ociosidade = float(kpis.media_ociosidade if kpis and kpis.media_ociosidade is not None else 0)
             prev_ociosidade = float(kpis_prev.media_ociosidade if kpis_prev and kpis_prev.media_ociosidade is not None else 0)
-            trend_ociosidade = round(curr_ociosidade - prev_ociosidade, 1) if prev_ociosidade else 0.0
+            trend_ociosidade = round(curr_ociosidade - prev_ociosidade, 1)
             
+            # Saída de Base
             curr_saida = float(kpis.media_saida_base if kpis and kpis.media_saida_base is not None else 0)
             prev_saida = float(kpis_prev.media_saida_base if kpis_prev and kpis_prev.media_saida_base is not None else 0)
-            trend_saida = round(curr_saida - prev_saida, 1) if prev_saida else 0.0
+            trend_saida = round(curr_saida - prev_saida, 1)
             
+            # Retorno de Base
             curr_retorno = float(kpis.media_retorno_base if kpis and kpis.media_retorno_base is not None else 0)
             prev_retorno = float(kpis_prev.media_retorno_base if kpis_prev and kpis_prev.media_retorno_base is not None else 0)
-            trend_retorno = round(curr_retorno - prev_retorno, 1) if prev_retorno else 0.0
+            trend_retorno = round(curr_retorno - prev_retorno, 1)
+
+            # Desvios de Percurso
+            curr_desvios = float(kpis.media_desvios if kpis and kpis.media_desvios is not None else 0)
         else:
             trend_ociosidade = 0.0
             trend_saida = 0.0
@@ -210,6 +232,7 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
             curr_ociosidade = 0.0
             curr_saida = 0.0
             curr_retorno = 0.0
+            curr_desvios = 0.0
 
         # Notas Rejeitadas no mesmo período
         rej_query = db.query(models.Rejeicao)
@@ -220,46 +243,108 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
         total_rejeicoes = rej_query.with_entities(func.sum(models.Rejeicao.num_rejeicoes)).scalar() or 0
         
         # Motivos de Rejeição (Desvios mais ocorridos)
-        motivos_rej = rej_query.with_entities(
-            models.Rejeicao.motivo,
-            func.sum(models.Rejeicao.num_rejeicoes).label('qtd')
-        ).filter(models.Rejeicao.motivo != None).group_by(models.Rejeicao.motivo).order_by(func.sum(models.Rejeicao.num_rejeicoes).desc()).limit(3).all()
+        # RENOMEADO PARA EVITAR CONFLITO COM produtividade.desvios_min
+        motivos_rej = []
+        try:
+            motivos_rej = rej_query.with_entities(
+                models.Rejeicao.motivo,
+                func.sum(models.Rejeicao.num_rejeicoes).label('qtd_rejeicao')
+            ).filter(models.Rejeicao.motivo != None).group_by(models.Rejeicao.motivo).order_by(func.sum(models.Rejeicao.num_rejeicoes).desc()).limit(3).all()
+        except Exception as e:
+            print(f"DEBUG: Motivos Rej error (ignorable): {e}")
 
-        top_desvios = [{"motivo": m.motivo, "qtd": int(m.qtd)} for m in motivos_rej]
+        top_desvios = []
+        try:
+            top_desvios = [{"motivo": m.motivo, "qtd": int(getattr(m, 'qtd_rejeicao', 0))} for m in (motivos_rej or [])]
+        except Exception as e:
+            print(f"DEBUG: top_desvios error: {e}")
 
-        # 2. Dados para Gráficos com Métrica Dinâmica
-        col_metric = models.Produtividade.produtividade_pct
-        if metric == "ociosidade": col_metric = models.Produtividade.ociosidade_min
-        elif metric == "saida": col_metric = models.Produtividade.saida_base_min
+        # Funçao Auxiliar para mapear dados de gráfico por regional/equipe
+        def get_metric_map(target_query, m_col, v_type, ccm_flag):
+            try:
+                if v_type == "equipe":
+                    res = target_query.with_entities(
+                        models.Produtividade.equipe,
+                        func.avg(m_col).label('val')
+                    ).group_by(models.Produtividade.equipe).all()
+                    return {r.equipe: float(getattr(r, 'val', 0) or 0) for r in res if r.equipe}
+                else:
+                    a_data = target_query.with_entities(models.Produtividade.csd, m_col).all()
+                    r_agg = {}
+                    for row in a_data:
+                        csd_val = row[0]
+                        metr_val = row[1]
+                        label = get_regional(csd_val) if ccm_flag else get_csd_turmas(csd_val)
+                        if label is None: continue
+                        if label not in r_agg: r_agg[label] = []
+                        r_agg[label].append(float(metr_val or 0))
+                    return {label: (sum(v)/len(v) if len(v) > 0 else 0) for label, v in r_agg.items()}
+            except Exception as e:
+                print(f"DEBUG: get_metric_map failure for metric {m_col}: {e}")
+                return {}
 
-        if view == "equipe":
-            chart_group = query.with_entities(
-                models.Produtividade.equipe,
-                func.avg(col_metric).label('val')
-            ).group_by(models.Produtividade.equipe).order_by(func.avg(col_metric).desc() if metric == "ocupacao" else func.avg(col_metric).asc()).all()
+        # 2. Dados para Gráficos - Calculando Atual, Prev1 e Prev2
+        chart_metrics = ["ocupacao", "ociosidade", "saida", "desvios"]
+        all_charts = {}
+
+        # Definindo queries para Prev1 e Prev2
+        query_p1 = db.query(models.Produtividade)
+        query_p2 = db.query(models.Produtividade)
+        if sector:
+            query_p1 = query_p1.filter(models.Produtividade.setor.ilike(f"%{sector}%"))
+            query_p2 = query_p2.filter(models.Produtividade.setor.ilike(f"%{sector}%"))
+        
+        if max_date:
+            # P1 (Sempre o período imediatamente anterior ao selecionado)
+            p1_max = min_date - datetime.timedelta(days=1)
+            if periodo == "day": p1_min = p1_max
+            elif periodo == "week": p1_min = p1_max - datetime.timedelta(days=7)
+            elif periodo == "year": p1_min = p1_max.replace(month=1, day=1)
+            else: p1_min = p1_max.replace(day=1) # month
             
-            chart_labels = [c.equipe for c in chart_group if c.equipe]
-            chart_data = [round(float(c.val or 0), 1 if metric == "ocupacao" else 0) for c in chart_group if c.equipe]
+            # P2 (Sempre o período imediatamente anterior ao P1)
+            p2_max = p1_min - datetime.timedelta(days=1)
+            if periodo == "day": p2_min = p2_max
+            elif periodo == "week": p2_min = p2_max - datetime.timedelta(days=7)
+            elif periodo == "year": p2_min = p2_max.replace(month=1, day=1)
+            else: p2_min = p2_max.replace(day=1) # month
+            
+            query_p1 = query_p1.filter(models.Produtividade.data >= p1_min, models.Produtividade.data <= p1_max)
+            query_p2 = query_p2.filter(models.Produtividade.data >= p2_min, models.Produtividade.data <= p2_max)
         else:
-            # Agregando por Regional para CCM, ou por CSD original para outros
-            all_data = query.with_entities(models.Produtividade.csd, col_metric).all()
-            reg_agg = {}
-            for row in all_data:
-                label = get_regional(row.csd) if is_ccm else get_csd_turmas(row.csd)
-                if label is None: continue
-                if label not in reg_agg: reg_agg[label] = []
-                reg_agg[label].append(float(row[1] or 0))
+            p1_min = p1_max = p2_min = p2_max = datetime.date.today()
+
+        for m_key in chart_metrics:
+            m_col = models.Produtividade.produtividade_pct
+            if m_key == "ociosidade": m_col = models.Produtividade.ociosidade_min
+            elif m_key == "saida": m_col = models.Produtividade.saida_base_min
+            elif m_key == "desvios": m_col = models.Produtividade.desvios_min
             
-            chart_labels = []
-            chart_data = []
-            for label, vals in reg_agg.items():
-                chart_labels.append(label)
-                chart_data.append(round(sum(vals)/len(vals), 1 if metric == "ocupacao" else 0))
+            # Não precisamos inicializar p-key como vazio aqui pois será sobrescrito
+
+            # Calcula Mapas (Atual, Prev1, Prev2)
+            curr_map = get_metric_map(query, m_col, view, is_ccm)
+            p1_map = get_metric_map(query_p1, m_col, view, is_ccm)
+            p2_map = get_metric_map(query_p2, m_col, view, is_ccm)
+
+            # Sort labels by current performance
+            sorted_labels = sorted(curr_map.keys(), key=lambda x: curr_map[x], reverse=(m_key == "ocupacao"))
             
-            # Sort regional by metric
-            sorted_chart = sorted(zip(chart_labels, chart_data), key=lambda x: x[1], reverse=(metric == "ocupacao"))
-            chart_labels = [x[0] for x in sorted_chart]
-            chart_data = [x[1] for x in sorted_chart]
+            c_data = [round(curr_map.get(l, 0), 1 if m_key == "ocupacao" else 1) for l in sorted_labels]
+            p1_data = [round(p1_map.get(l, 0), 1 if m_key == "ocupacao" else 1) for l in sorted_labels]
+            p2_data = [round(p2_map.get(l, 0), 1 if m_key == "ocupacao" else 1) for l in sorted_labels]
+            
+            all_charts[m_key] = {
+                "labels": sorted_labels, 
+                "data": c_data,
+                "prev1": p1_data,
+                "prev2": p2_data,
+                "labels_prev": [p1_min.strftime("%b/%y") if max_date else "Ant.1", p2_min.strftime("%b/%y") if max_date else "Ant.2"]
+            }
+
+        # Para compatibilidade (mantém valores do período atual)
+        chart_labels = all_charts[metric]["labels"]
+        chart_data = all_charts[metric]["data"]
 
         # 3. Definição de Metas e Escopo Global
         num_dias = db.query(func.count(func.distinct(models.Produtividade.data))).filter(
@@ -269,6 +354,11 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
         ).scalar() or 1
         res_meta = 95 if is_ccm else 85
 
+        # Cálculo de Atingimento de Meta (Para Turmas)
+        total_rows = query.count()
+        count_meta = query.filter(models.Produtividade.produtividade_pct >= res_meta).count()
+        pct_conf_periodo = (count_meta / total_rows * 100) if total_rows > 0 else 0
+
         # 3. Top Melhores e Piores
         equipes_group = query.with_entities(
             models.Produtividade.equipe,
@@ -277,6 +367,7 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
             func.sum(models.Produtividade.ociosidade_min).label('ociosidade'),
             func.avg(models.Produtividade.saida_base_min).label('saida_base'),
             func.avg(models.Produtividade.retorno_base_min).label('retorno_base'),
+            func.sum(models.Produtividade.desvios_min).label('sum_desvios_min'),
             func.sum(models.Produtividade.notas_executadas).label('notas'),
             func.sum(models.Produtividade.notas_rejeitadas).label('rejeitadas'),
             func.sum(models.Produtividade.notas_interrompidas).label('interrompidas')
@@ -320,45 +411,66 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
             label = get_regional(e.csd) if is_ccm else get_csd_turmas(e.csd)
             if label is None: continue
 
+        breakdown_csd = []
+        # Reutilizamos os dados já calculados em all_charts para performance e consistência
+        # all_charts já tem as médias por Regional/CSD calculadas corretamente pelo get_metric_map
+        
+        # 4. Breakdown por Regional (CCM) ou CSD (Turmas)
+        # Vamos usar o breakdown_dict apenas para agrupar as EQUIPES por regional
+        breakdown_dict = {}
+        for e in equipes_sorted:
+            label = get_regional(e.csd) if is_ccm else get_csd_turmas(e.csd)
+            if label is None: continue
+
             if label not in breakdown_dict:
-                breakdown_dict[label] = {"name": label, "equipes": [], "acima_meta": 0, "sum_prod": 0, "sum_ociosidade": 0, "sum_saida": 0}
+                breakdown_dict[label] = {
+                    "name": label, 
+                    "equipes": [], 
+                    "acima_meta": 0,
+                    # Pegamos as médias consolidadas que já calculamos para os gráficos
+                    "produtividade": round(all_charts["ocupacao"]["labels"].index(label) >= 0 and all_charts["ocupacao"]["data"][all_charts["ocupacao"]["labels"].index(label)] or 0, 1) if label in all_charts["ocupacao"]["labels"] else 0,
+                    "ociosidade": round(all_charts.get("ociosidade", {}).get("data", [0]*len(all_charts.get("ociosidade", {}).get("labels", [])))[all_charts.get("ociosidade", {}).get("labels", []).index(label)] if "ociosidade" in all_charts and label in all_charts["ociosidade"].get("labels", []) else 0, 1),
+                    "desvios": round(all_charts.get("desvios", {}).get("data", [0]*len(all_charts.get("desvios", {}).get("labels", [])))[all_charts.get("desvios", {}).get("labels", []).index(label)] if "desvios" in all_charts and label in all_charts["desvios"].get("labels", []) else 0, 1),
+                    "saida": round(all_charts["saida"]["data"][all_charts["saida"]["labels"].index(label)] if label in all_charts["saida"]["labels"] else 0, 1)
+                }
             
-            prod = round(float(e.media_prod or 0), 1)
-            ociosidade_med = int((e.ociosidade or 0) / num_dias)
-            saida_med = round(float(e.saida_base or 0), 1)
+            # Dados individuais da equipe (já agregados por equipe/período)
+            # Para média diária da EQUIPE, dividimos por num_dias
+            eq_ociosidade = round((float(getattr(e, 'ociosidade', 0) or 0)) / num_dias, 1)
+            eq_desvios = round((float(getattr(e, 'sum_desvios_min', 0) or 0)) / num_dias, 1)
+            eq_prod = round(float(getattr(e, 'media_prod', 0) or 0), 1)
+            eq_saida = round(float(getattr(e, 'saida_base', 0) or 0), 1)
+            
             breakdown_dict[label]["equipes"].append({
                 "equipe": e.equipe, 
                 "base": e.csd,
-                "prod": prod,
-                "ociosidade": ociosidade_med,
-                "saida": saida_med
+                "prod": eq_prod,
+                "ociosidade": eq_ociosidade,
+                "desvios": eq_desvios,
+                "saida": eq_saida
             })
-            breakdown_dict[label]["sum_prod"] += prod
-            breakdown_dict[label]["sum_ociosidade"] += (e.ociosidade or 0)
-            breakdown_dict[label]["sum_saida"] += saida_med
 
             # Lógica de aderência (acima_meta) dinâmica baseada na métrica
-            if metric == "ocupacao" and prod >= res_meta:
+            if metric == "ocupacao" and eq_prod >= res_meta:
                  breakdown_dict[label]["acima_meta"] += 1
-            elif metric == "ociosidade" and ociosidade_med <= 30: # Meta 30min ociosidade
+            elif metric == "ociosidade" and eq_ociosidade <= 15: # Meta 15min ociosidade
                  breakdown_dict[label]["acima_meta"] += 1
-            elif metric == "saida" and saida_med <= 30: # Meta 30min saída
+            elif metric == "saida" and eq_saida <= 30: # Meta 30min saída
                  breakdown_dict[label]["acima_meta"] += 1
-            elif not is_ccm and prod >= res_meta:
+            elif metric == "desvios" and eq_desvios <= 10: # Meta 10min desvios
+                 breakdown_dict[label]["acima_meta"] += 1
+            elif not is_ccm and eq_prod >= res_meta:
                  breakdown_dict[label]["acima_meta"] += 1
 
-        breakdown_csd = []
         for label, data in breakdown_dict.items():
             num_equipes = len(data["equipes"])
             data["num_equipes"] = num_equipes
-            data["produtividade"] = round(data["sum_prod"] / num_equipes, 1) if num_equipes > 0 else 0
-            data["ociosidade"] = int(data["sum_ociosidade"] / (num_equipes * num_dias)) if num_equipes > 0 else 0
-            data["saida"] = round(data["sum_saida"] / num_equipes, 1) if num_equipes > 0 else 0
-
-            # Sort equipes by current metric (Ascending)
-            if metric == "ociosidade": data["equipes"] = sorted(data["equipes"], key=lambda x: x["ociosidade"])
-            elif metric == "saida": data["equipes"] = sorted(data["equipes"], key=lambda x: x["saida"])
-            else: data["equipes"] = sorted(data["equipes"], key=lambda x: x["prod"])
+            
+            # Ordenação das equipes dentro da regional
+            if metric == "ociosidade": data["equipes"] = sorted(data["equipes"], key=lambda x: x.get("ociosidade", 0))
+            elif metric == "saida": data["equipes"] = sorted(data["equipes"], key=lambda x: x.get("saida", 0))
+            elif metric == "desvios": data["equipes"] = sorted(data["equipes"], key=lambda x: x.get("desvios", 0))
+            else: data["equipes"] = sorted(data["equipes"], key=lambda x: x.get("prod", 0), reverse=True)
             
             breakdown_csd.append(data)
 
@@ -412,10 +524,12 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
         if not insights:
             insights.append({"type": "info", "text": "Indicadores operacionais CCM dentro da normalidade estatística." if is_ccm else "Indicadores Turmas em conformidade."})
 
-        # Busca informações de sincronização
-        sync_log = db.query(models.SyncLog).filter(models.SyncLog.source_file == "STC_DataProd_export.xlsx").order_by(models.SyncLog.last_sync.desc()).first()
-        file_source = sync_log.source_file if sync_log else "STC_DataProd_export.xlsx"
-        upd_time = sync_log.last_sync.strftime("%d/%m/%Y %H:%M") if sync_log else "N/A"
+        # Busca informações de sincronização mais recentes entre Turmas e CCM
+        sync_files = ["STC_DataProd_export.xlsx", "Dados gerais por dia e por equipe - CCM.xlsx"]
+        latest_sync = db.query(models.SyncLog).filter(models.SyncLog.source_file.in_(sync_files)).order_by(models.SyncLog.last_sync.desc()).first()
+        
+        file_source = latest_sync.source_file if latest_sync else ("Dados operacionais CCM.xlsx" if is_ccm else "STC_DataProd_export.xlsx")
+        upd_time = latest_sync.last_sync.strftime("%d/%m/%Y %H:%M") if latest_sync else "N/A"
 
         periodo_label = "Período não definido"
         if min_date and max_date:
@@ -426,8 +540,8 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
         result = {
             "meta_prod": res_meta,
             "periodo_ref": periodo_label,
-            "source_file": "Dados operacionais CCM.xlsx" if is_ccm else "STC_DataProd_export.xlsx",
-            "last_update": datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "source_file": file_source,
+            "last_update": upd_time,
             "stats": {
                 "media_prod": round(curr_prod, 1),
                 "trend_prod": trend_prod,
@@ -437,13 +551,13 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
                 "trend_saida": trend_saida,
                 "media_retorno_base": round(curr_retorno, 1),
                 "trend_retorno": trend_retorno,
-                "total_ociosidade_hrs": float((kpis.total_ociosidade if kpis else 0) or 0) / 60,
-                "total_desvios_hrs": float((kpis.total_desvios if kpis else 0) or 0) / 60,
+                "total_ociosidade_hrs": float(getattr(kpis, 'total_ociosidade', 0) or 0) / 60,
+                "total_desvios_hrs": float(getattr(kpis, 'total_desvios', 0) or 0) / 60,
                 "total_hora_extra_hrs": float((kpis.total_hora_extra if kpis else 0) or 0) / 60,
                 "total_notas": int((kpis.total_notas if kpis else 0) or 0),
                 "total_rejeicoes": int(total_rejeicoes),
                 "total_equipes": int((kpis.total_equipes if kpis else 0) or 0),
-                "atingimento_meta": round((curr_prod / res_meta) * 100, 1) if curr_prod > 0 else 0,
+                "atingimento_meta": round(pct_conf_periodo, 1) if not is_ccm else round((curr_prod / res_meta) * 100, 1) if curr_prod > 0 else 0,
                 "num_dias": int(num_dias)
             },
             "top_desvios": top_desvios,
@@ -451,9 +565,10 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
                 "labels": chart_labels,
                 "data": chart_data
             },
+            "charts": all_charts,
             "top_piores": top_piores,
             "top_melhores": top_melhores,
-            "breakdown_csd": sorted(breakdown_csd, key=lambda x: x["produtividade"] if metric == "ocupacao" else (x["ociosidade"] if metric == "ociosidade" else x["saida"]), reverse=(metric == "ocupacao")),
+            "breakdown_csd": sorted(breakdown_csd, key=lambda x: x["produtividade"] if metric == "ocupacao" else (x["ociosidade"] if metric == "ociosidade" else (x.get("desvios", 0) if metric == "desvios" else x["saida"])), reverse=(metric == "ocupacao")),
             "evolucao": evolucao,
             "insights": insights
         }
@@ -2087,8 +2202,8 @@ def get_apr_dashboard(sector: str = Query("CCM", description="Setor: CCM ou TURM
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/saida_base/dashboard")
-def get_saida_base_dashboard(view: str = "dia", db: Session = Depends(get_db)):
-    cache_key = f"saida_base_dashboard_{view}"
+def get_saida_base_dashboard(view: str = "dia", periodo: str = "latest", db: Session = Depends(get_db)):
+    cache_key = f"saida_base_dashboard_{view}_{periodo}"
     cached = api_cache.get(cache_key)
     if cached: return cached
     try:
@@ -2103,18 +2218,35 @@ def get_saida_base_dashboard(view: str = "dia", db: Session = Depends(get_db)):
         if not records:
             return {"error": "Sem dados"}
             
-        df = pd.DataFrame([{
-            "DATA": r.data, 
-            "REGIONAL": r.regional, 
-            "EQUIPE": r.equipe, 
-            "MOTIVO": r.motivo, 
-            "TEMPO DE EMBARQUE": r.tempo_embarque, 
-            "Custo Total": r.custo_total, 
-            "OFENSOR": r.ofensor
-        } for r in records])
+        # Normalização de dados para o DataFrame para evitar KeyError por casing
+        data_list = []
+        for r in records:
+            data_list.append({
+                "DATA": r.data,
+                "REGIONAL": r.regional,
+                "EQUIPE": r.equipe,
+                "MOTIVO": r.motivo,
+                "TEMPO DE EMBARQUE": r.tempo_embarque,
+                "CUSTO TOTAL": r.custo_total,
+                "OFENSOR": r.ofensor
+            })
+        df = pd.DataFrame(data_list)
         
         df['DATA'] = pd.to_datetime(df['DATA'])
         hoje = df['DATA'].max()
+        
+        # Filtro de período dinâmico
+        if periodo == "day":
+            df_filtered = df[df['DATA'] == hoje]
+        elif periodo == "week":
+            df_filtered = df[df['DATA'] >= (hoje - datetime.timedelta(days=7))]
+        elif periodo == "month":
+            df_filtered = df[df['DATA'].dt.month == hoje.month]
+        elif periodo == "year":
+            df_filtered = df[df['DATA'].dt.year == hoje.year]
+        else: # "latest" ou fallback
+            df_filtered = df[df['DATA'].dt.month == hoje.month]
+            
         meta = 30.0
         
         df_hoje = df[df['DATA'] == hoje]
@@ -2124,15 +2256,26 @@ def get_saida_base_dashboard(view: str = "dia", db: Session = Depends(get_db)):
         data_30d = hoje - datetime.timedelta(days=30)
         
         # 1. KPIs
-        media_dia = float(df_hoje['TEMPO DE EMBARQUE'].mean()) if df_hoje['TEMPO DE EMBARQUE'].notna().any() else 0.0
-        media_mes = float(df_mes['TEMPO DE EMBARQUE'].mean()) if df_mes['TEMPO DE EMBARQUE'].notna().any() else 0.0
+        # Tempo Médio do Período Filtrado
+        media_periodo = float(df_filtered['TEMPO DE EMBARQUE'].mean()) if df_filtered['TEMPO DE EMBARQUE'].notna().any() else 0.0
+        # Tempo Médio de Hoje (para variação)
+        media_hoje = float(df_hoje['TEMPO DE EMBARQUE'].mean()) if df_hoje['TEMPO DE EMBARQUE'].notna().any() else 0.0
         
-        eq_com_dado = int(df_mes['TEMPO DE EMBARQUE'].notna().sum())
-        eq_atraso = int(len(df_mes[df_mes['TEMPO DE EMBARQUE'] > meta]))
-        pct_conf = round((eq_com_dado - eq_atraso) / eq_com_dado * 100, 1) if eq_com_dado > 0 else 0.0
+        # Aderência no Período Filtrado
+        eq_com_dado_periodo = int(df_filtered['EQUIPE'].nunique())
+        # Calculamos a média por equipe no período para saber quantas ficaram na meta no consolidado
+        df_eq_periodo = df_filtered.groupby('EQUIPE')['TEMPO DE EMBARQUE'].mean().reset_index()
+        eq_dentro_meta_periodo = int(len(df_eq_periodo[df_eq_periodo['TEMPO DE EMBARQUE'] <= meta]))
+        pct_conf_periodo = round((eq_dentro_meta_periodo / eq_com_dado_periodo) * 100, 1) if eq_com_dado_periodo > 0 else 0.0
+
+        # Novo Indicador Gerencial: Índice de Produtividade Efetiva (IPE)
+        # % de operações que foram produtivas (dentro da meta) no período total
+        total_operacoes_periodo = int(len(df_filtered))
+        total_dentro_meta_periodo = int(len(df_filtered[df_filtered['TEMPO DE EMBARQUE'] <= meta]))
+        indice_produtividade_efetiva = round((total_dentro_meta_periodo / total_operacoes_periodo) * 100, 1) if total_operacoes_periodo > 0 else 0.0
 
         # Custo projetado
-        df_mes_agg = df_mes.groupby('DATA').agg(custo=('Custo Total', 'sum')).reset_index()
+        df_mes_agg = df_mes.groupby('DATA').agg(custo=('CUSTO TOTAL', 'sum')).reset_index()
         dias_no_mes = df_mes_agg['DATA'].nunique()
         custo_mes = float(df_mes_agg['custo'].sum())
         custo_diario = custo_mes / dias_no_mes if dias_no_mes > 0 else 0
@@ -2192,8 +2335,8 @@ def get_saida_base_dashboard(view: str = "dia", db: Session = Depends(get_db)):
         # 3. Ofensores Equipes (Mês atual para alinhar com os KPIs financeiros da regional)
         ofensores_df = df_mes.groupby(['EQUIPE', 'OFENSOR']).agg({
             'TEMPO DE EMBARQUE': 'mean',
-            'Custo Total': 'sum'
-        }).reset_index().sort_values('Custo Total', ascending=False)
+            'CUSTO TOTAL': 'sum'
+        }).reset_index().sort_values('CUSTO TOTAL', ascending=False)
 
         maiores_ofensores = []
         for _, row in ofensores_df.iterrows():
@@ -2201,28 +2344,31 @@ def get_saida_base_dashboard(view: str = "dia", db: Session = Depends(get_db)):
                 "equipe": str(row['EQUIPE']),
                 "setor": str(row['OFENSOR']),
                 "minutos": float(round(row['TEMPO DE EMBARQUE'], 1)) if pd.notna(row['TEMPO DE EMBARQUE']) else 0.0,
-                "valor_rs": float(round(row['Custo Total'], 2))
+                "valor_rs": float(round(row['CUSTO TOTAL'], 2))
             })
 
         # 4. Ofensores Setores
         setores_df = df_mes.groupby('OFENSOR').agg({
-            'Custo Total': 'sum',
+            'CUSTO TOTAL': 'sum',
             'TEMPO DE EMBARQUE': 'mean'
-        }).reset_index().sort_values('Custo Total', ascending=False)
+        }).reset_index().sort_values('CUSTO TOTAL', ascending=False)
+        
+        custo_total_setores = setores_df['CUSTO TOTAL'].sum()
         
         ofensores_setor = []
         for _, row in setores_df.iterrows():
             ofensores_setor.append({
                 "label": str(row['OFENSOR']),
-                "valor_rs": float(round(row['Custo Total'], 2)),
+                "valor_rs": float(round(row['CUSTO TOTAL'], 2)),
+                "percent": float(round((row['CUSTO TOTAL'] / custo_total_setores * 100), 1)) if custo_total_setores > 0 else 0.0,
                 "minutos": float(round(row['TEMPO DE EMBARQUE'], 1)) if pd.notna(row['TEMPO DE EMBARQUE']) else 0.0
             })
 
         # 5. Maiores Motivos
         motivos_df = df_mes.groupby('MOTIVO').agg({
             'EQUIPE': 'count',
-            'Custo Total': 'sum'
-        }).reset_index().rename(columns={'EQUIPE': 'count', 'Custo Total': 'valor_rs'})
+            'CUSTO TOTAL': 'sum'
+        }).reset_index().rename(columns={'EQUIPE': 'count', 'CUSTO TOTAL': 'valor_rs'})
         
         total_valor_motivos = float(motivos_df['valor_rs'].sum())
         motivos_df['percent_valor'] = (motivos_df['valor_rs'] / total_valor_motivos * 100).round(1) if total_valor_motivos > 0 else 0
@@ -2248,16 +2394,17 @@ def get_saida_base_dashboard(view: str = "dia", db: Session = Depends(get_db)):
             
             if pd.notna(m_atual) and pd.notna(m_anterior) and m_anterior > 0:
                 var_pct = round(((m_atual - m_anterior) / m_anterior) * 100, 1)
-                regional = str(df_eq['REGIONAL'].iloc[0])
-                setor = str(df_eq['OFENSOR'].iloc[0])
-                evolucao.append({
-                    "equipe": str(equipe),
-                    "setor": setor,
-                    "regional": regional,
-                    "semana_atual": float(round(m_atual, 1)),
-                    "semana_anterior": float(round(m_anterior, 1)),
-                    "variacao_pct": float(var_pct)
-                })
+                if not df_eq.empty:
+                    regional = str(df_eq['REGIONAL'].iloc[0])
+                    setor = str(df_eq['OFENSOR'].iloc[0])
+                    evolucao.append({
+                        "equipe": str(equipe),
+                        "setor": setor,
+                        "regional": regional,
+                        "semana_atual": float(round(m_atual, 1)),
+                        "semana_anterior": float(round(m_anterior, 1)),
+                        "variacao_pct": float(var_pct)
+                    })
 
         melhoraram = sorted([e for e in evolucao if e['variacao_pct'] < -5], key=lambda x: x['variacao_pct'])[:5]
         pioraram = sorted([e for e in evolucao if e['variacao_pct'] > 5], key=lambda x: x['variacao_pct'], reverse=True)[:5]
@@ -2281,23 +2428,29 @@ def get_saida_base_dashboard(view: str = "dia", db: Session = Depends(get_db)):
         else:
             # Dia: desde 01/01
             df_hist = df[df['DATA'] >= inicio_ano]
-            hist_raw = df_hist.groupby(['DATA', 'REGIONAL'])['TEMPO DE EMBARQUE'].mean().unstack().ffill()
-            history_labels = [d.strftime("%d/%m") for d in hist_raw.index]
+            if not df_hist.empty:
+                hist_raw = df_hist.groupby(['DATA', 'REGIONAL'])['TEMPO DE EMBARQUE'].mean().unstack().ffill()
+                history_labels = [d.strftime("%d/%m") for d in hist_raw.index]
+            else:
+                hist_raw = pd.DataFrame()
+                history_labels = []
 
-        # Filtrar regional NAN do histórico
-        INVALID_REGIONALS = {'NAN', 'NONE', 'N/A', ''}
-        history_datasets = {
-            str(col): [float(round(v, 1)) if pd.notna(v) else 0 for v in hist_raw[col].values]
-            for col in hist_raw.columns
-            if str(col).upper() not in INVALID_REGIONALS
-        }
+        history_datasets = {}
+        if not hist_raw.empty:
+            INVALID_REGIONALS = {'NAN', 'NONE', 'N/A', ''}
+            history_datasets = {
+                str(col): [float(round(v, 1)) if pd.notna(v) else 0 for v in hist_raw[col].values]
+                for col in hist_raw.columns
+                if str(col).upper() not in INVALID_REGIONALS
+            }
 
         # 8. Geração de Insights Inteligentes
         insights = []
+        custo_executado = float(df_mes['CUSTO TOTAL'].sum())
         if custo_proj > 0:
             insights.append({
-                "type": "preocupacao" if custo_proj > custo_mes * 1.5 else "atencao",
-                "text": f"Risco projetado mensal: R$ {custo_proj:,.2f} versus R$ {custo_mes:,.2f} já executados."
+                "type": "preocupacao" if custo_proj > custo_executado * 1.5 else "atencao",
+                "text": f"Risco projetado mensal: R$ {custo_proj:,.2f} versus R$ {custo_executado:,.2f} já executados."
             })
             
         if maiores_ofensores:
@@ -2314,30 +2467,33 @@ def get_saida_base_dashboard(view: str = "dia", db: Session = Depends(get_db)):
                 "text": f"Setor crítico: {pior_setor['label']} lidera custos em atrasos totalizando R$ {pior_setor['valor_rs']:,.2f} no período."
             })
             
-        if media_mes > 0 and media_dia > 0:
-            var_dia_x_mes = ((media_dia - media_mes) / media_mes) * 100
-            if var_dia_x_mes > 5:
+        if media_periodo > 0 and media_hoje > 0:
+            var_dia_x_periodo = ((media_hoje - media_periodo) / media_periodo) * 100
+            if var_dia_x_periodo > 5:
                 insights.append({
                     "type": "preocupacao",
-                    "text": f"Último dia operou com {media_dia:.1f}min, valor {var_dia_x_mes:.0f}% acima da média do mês atual."
+                    "text": f"Último dia operou com {media_hoje:.1f}min, valor {var_dia_x_periodo:.0f}% acima da média do período atual."
                 })
-            elif var_dia_x_mes < -5:
+            elif var_dia_x_periodo < -5:
                 insights.append({
                     "type": "destaque",
-                    "text": f"Média diária melhorou em {abs(var_dia_x_mes):.0f}% em relação ao agregado mensal."
+                    "text": f"Média diária melhorou em {abs(var_dia_x_periodo):.0f}% em relação ao agregado do período."
                 })
 
+        months_br = ["", "JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
         result = {
             "last_update": updated_at, 
             "meta": meta,
-            "period_label": f"Mês de {hoje.strftime('%B/%Y')} (Até {hoje.strftime('%d/%m')})",
+            "period_label": f"{months_br[hoje.month]}/{hoje.year} (ATÉ {hoje.strftime('%d/%m')})",
             "stats": {
-                "media_dia": round(media_dia, 1),
-                "media_mes": round(media_mes, 1),
-                "equipes_dentro_meta": eq_com_dado - eq_atraso,
-                "total_equipes": eq_com_dado,
-                "pct_conformidade": pct_conf,
-                "ritmo_comparativo": round(media_mes - media_dia, 1) # pos -> mais rapido no dia que mês 
+                "media_dia": round(media_periodo, 1),
+                "media_mes": round(media_periodo, 1),
+                "equipes_dentro_meta": eq_dentro_meta_periodo,
+                "total_equipes": eq_com_dado_periodo,
+                "pct_conformidade": pct_conf_periodo,
+                "indice_ipe": indice_produtividade_efetiva,
+                "total_equipes_periodo": eq_com_dado_periodo,
+                "ritmo_comparativo": round(media_periodo - media_hoje, 1) # Variação hoje vs Período
             },
             "custo_projetado": round(custo_proj, 2),
             "insights": insights,
@@ -2417,14 +2573,59 @@ def get_sync_status(db: Session = Depends(get_db)):
     return logs
 
 # ======= ROUTE DE TRIGGER (Manual Force Sync) =======
+def run_sync_wrapper(sync_func):
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        sync_func(db)
+    except Exception as e:
+        print(f"[BG_SYNC_ERROR] {e}")
+    finally:
+        db.close()
+
 @app.api_route("/api/v1/sync/run", methods=["GET", "POST"])
-def force_sync(module: str = Query("all", description="Módulo a sincronizar"), db: Session = Depends(get_db)):
-    # Desabilitado para FastLoad na Web: Sync executado offline pelo robô Python.
-    return {
-        "status": "sucesso",
-        "mensagem": f"Auto-Sync na interface desativado. Módulo [{module}] deve ser sincronizado via painel admin ou robô.",
-        "detalhes": []
+def force_sync(background_tasks: BackgroundTasks, module: str = Query("all", description="Módulo a sincronizar"), db: Session = Depends(get_db)):
+    """
+    Executa a sincronização. Módulos rápidos rodam na requisição (síncronos),
+    módulos pesados rodam em background.
+    """
+    sync_map = {
+        "produtividade": sync_engine.sync_produtividade,
+        "produtividade_ccm": sync_engine.sync_produtividade_ccm,
+        "5s": sync_engine.sync_5s,
+        "rejeicoes": sync_engine.sync_rejeicoes,
+        "frota": sync_engine.sync_frota,
+        "indisponibilidade": sync_engine.sync_indisponibilidade,
+        "logccm": sync_engine.sync_logccm,
+        "apr": sync_engine.sync_apr,
+        "saida_base": sync_engine.sync_saida_base,
     }
+
+    # Módulos que demoram mais de 10s para processar (Excel gigante ou Scraping)
+    heavy_modules = ["all", "logccm", "frota", "5s", "apr", "indisponibilidade", "saida_base"]
+
+    try:
+        # Resetar cache para garantir consistência
+        api_cache.clear()
+
+        if module == "all":
+            for m_func in sync_map.values():
+                background_tasks.add_task(run_sync_wrapper, m_func)
+            return {"status": "sucesso", "mensagem": "Sincronização global iniciada em background."}
+
+        if module not in sync_map:
+            return {"status": "erro", "mensagem": f"Módulo [{module}] desconhecido."}
+
+        if module in heavy_modules:
+            background_tasks.add_task(run_sync_wrapper, sync_map[module])
+            return {"status": "sucesso", "mensagem": f"Processamento pesado para [{module}] iniciado em background."}
+        else:
+            # Módulo rápido: Roda síncrono para o dashboard atualizar na hora
+            sync_map[module](db)
+            return {"status": "sucesso", "mensagem": f"Módulo [{module}] sincronizado com sucesso."}
+
+    except Exception as e:
+        return {"status": "erro", "mensagem": str(e)}
 
 # ======= CONFIGURATIONS ENDPOINTS =======
 

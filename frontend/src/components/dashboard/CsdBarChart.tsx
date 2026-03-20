@@ -12,9 +12,15 @@ interface CsdBarChartProps {
     variant?: 'status' | 'info'
     compareData?: { name: string; prod: number }[]
     compareLabel?: string
+    compareData2?: { name: string; prod: number }[]
+    compareLabel2?: string
 }
 
-export function CsdBarChart({ data, meta, onBarClick, selectedBar, unit = "%", variant = 'status', compareData, compareLabel = "Anterior" }: CsdBarChartProps) {
+export function CsdBarChart({ 
+    data, meta, onBarClick, selectedBar, unit = "%", variant = 'status', 
+    compareData, compareLabel = "Anterior",
+    compareData2, compareLabel2 = "Anterior 2"
+}: CsdBarChartProps) {
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
@@ -26,17 +32,24 @@ export function CsdBarChart({ data, meta, onBarClick, selectedBar, unit = "%", v
     }
 
     const isTime = unit === "min"
-    const hasCompare = !!compareData && compareData.length > 0
+    const hasCompare1 = !!compareData && compareData.length > 0
+    const hasCompare2 = !!compareData2 && compareData2.length > 0
 
     // Merge data with compareData by name when comparison mode is on
-    const mergedData = hasCompare
-        ? data.map(d => {
-            const match = compareData!.find(c => c.name === d.name)
-            return { name: d.name, prod: d.prod, prodPrev: match?.prod ?? 0 }
-          })
-        : data
+    const mergedData = data.map(d => {
+        const item: any = { name: d.name, prod: d.prod }
+        if (hasCompare1) {
+            const match1 = compareData!.find(c => c.name === d.name)
+            item.prodPrev = match1?.prod ?? 0
+        }
+        if (hasCompare2) {
+            const match2 = compareData2!.find(c => c.name === d.name)
+            item.prodPrev2 = match2?.prod ?? 0
+        }
+        return item
+    })
 
-    const minWidth = mergedData.length > 10 ? mergedData.length * (hasCompare ? 60 : 40) : '100%'
+    const minWidth = mergedData.length > 10 ? mergedData.length * (hasCompare1 ? 80 : 40) : '100%'
 
     return (
         <div className="w-full h-full overflow-x-auto custom-scroll relative min-h-0">
@@ -45,7 +58,7 @@ export function CsdBarChart({ data, meta, onBarClick, selectedBar, unit = "%", v
                     <ResponsiveContainer width="100%" height="100%" debounce={100}>
                         <BarChart
                             data={mergedData}
-                            margin={{ top: 20, right: 30, left: 10, bottom: 40 }}
+                            margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
                         >
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.5} />
                             <XAxis
@@ -56,7 +69,7 @@ export function CsdBarChart({ data, meta, onBarClick, selectedBar, unit = "%", v
                                 interval={0}
                                 angle={data.length > 8 ? -45 : 0}
                                 textAnchor={data.length > 8 ? 'end' : 'middle'}
-                                height={60}
+                                height={25}
                             />
                             <YAxis
                                 axisLine={false}
@@ -88,13 +101,13 @@ export function CsdBarChart({ data, meta, onBarClick, selectedBar, unit = "%", v
                                 }}
                                 formatter={(value: number | undefined, name: string | undefined) => [
                                     `${value ?? 0}${unit}`,
-                                    (name ?? '') === 'prod' ? 'Atual' : compareLabel
+                                    name === 'prod' ? 'Atual' : (name === 'prodPrev' ? compareLabel : compareLabel2)
                                 ]}
                             />
-                            {hasCompare && (
+                            {(hasCompare1 || hasCompare2) && (
                                 <Legend
                                     wrapperStyle={{ fontSize: '10px', fontWeight: '600', paddingTop: '4px' }}
-                                    formatter={(value) => value === 'prod' ? 'Atual' : compareLabel}
+                                    formatter={(value) => value === 'prod' ? 'Atual' : (value === 'prodPrev' ? compareLabel : compareLabel2)}
                                 />
                             )}
 
@@ -117,7 +130,7 @@ export function CsdBarChart({ data, meta, onBarClick, selectedBar, unit = "%", v
                             <Bar
                                 dataKey="prod"
                                 radius={[4, 4, 0, 0]}
-                                maxBarSize={hasCompare ? 28 : 40}
+                                maxBarSize={hasCompare1 ? 24 : 40}
                                 animationDuration={1000}
                                 onClick={(entry) => {
                                     if (entry && entry.name && onBarClick) {
@@ -144,14 +157,24 @@ export function CsdBarChart({ data, meta, onBarClick, selectedBar, unit = "%", v
                                     );
                                 })}
                             </Bar>
-                            {hasCompare && (
+                            {hasCompare1 && (
                                 <Bar
                                     dataKey="prodPrev"
                                     radius={[4, 4, 0, 0]}
-                                    maxBarSize={28}
+                                    maxBarSize={hasCompare2 ? 20 : 28}
                                     animationDuration={1000}
                                     fill="var(--border)"
                                     fillOpacity={0.6}
+                                />
+                            )}
+                            {hasCompare2 && (
+                                <Bar
+                                    dataKey="prodPrev2"
+                                    radius={[4, 4, 0, 0]}
+                                    maxBarSize={20}
+                                    animationDuration={1000}
+                                    fill="var(--text-muted)"
+                                    fillOpacity={0.4}
                                 />
                             )}
                         </BarChart>

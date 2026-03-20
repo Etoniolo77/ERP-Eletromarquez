@@ -1,6 +1,7 @@
 "use client"
 
 import { RefreshButton } from "@/components/ui/RefreshButton"
+import { PeriodSelector } from "@/components/providers/PeriodSelector"
 
 interface Insight {
     type: "success" | "warning" | "danger" | "info"
@@ -18,6 +19,10 @@ interface PageHeaderProps {
     onRefresh?: () => void
     loading?: boolean
     children?: React.ReactNode
+    showPeriodSelector?: boolean
+    tabs?: { id: string; label: string; icon: string }[]
+    activeTab?: string
+    onTabChange?: (id: string) => void
 }
 
 // Parse "DD/MM/YYYY HH:MM" → Date
@@ -64,19 +69,23 @@ export function PageHeader({
     onRefresh,
     loading,
     children,
+    showPeriodSelector,
+    tabs,
+    activeTab,
+    onTabChange
 }: PageHeaderProps) {
-    const hasFooter = onRefresh || sourceFile || lastUpdate || monitoramento || children
+    const hasFooter = onRefresh || sourceFile || lastUpdate || monitoramento || children || showPeriodSelector || (tabs && tabs.length > 0)
 
     return (
-        <div className="bg-surface border border-border rounded-sm shadow-sm overflow-hidden">
+        <div className="bg-surface border border-border shadow-sm flex flex-col mb-4 overflow-hidden rounded-sm transition-all hover:border-primary/30">
             <div className="flex items-stretch gap-6 p-4">
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 self-center">
                     <span className="material-symbols-outlined text-primary text-[28px]">{icon}</span>
                 </div>
-                <div className="flex-1 flex flex-col justify-between py-1 gap-3">
+                <div className="flex-1 flex flex-col py-1 gap-3">
                     <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <h3 className="text-[9px] font-semibold uppercase text-text-muted tracking-widest">{title}</h3>
+                        <h3 className="text-[10px] font-semibold uppercase text-text-muted tracking-[0.2em]">{title}</h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
                         {insights && insights.length > 0 ? (
@@ -92,35 +101,52 @@ export function PageHeader({
                         )}
                     </div>
                 </div>
+            </div>
 
-                {/* Right column: button + metadata + filters */}
-                {(hasFooter || children) && (
-                    <div className="flex flex-col items-end justify-center gap-2 min-w-[150px] flex-shrink-0">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                           {children}
-                           {onRefresh && <RefreshButton onClick={onRefresh} loading={loading ?? false} />}
-                        </div>
-                        <div className="text-right">
-                            {monitoramento && (
-                                <p className="text-[9px] text-text-muted font-semibold uppercase tracking-tight leading-relaxed">
-                                    Monitoramento: <span className="text-text-heading/70">{monitoramento}</span>
-                                </p>
+            {hasFooter && (
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between border-t border-border px-4 py-2 bg-transparent gap-4 min-h-[48px]">
+                    <div className="flex items-center gap-6 overflow-x-auto custom-scrollbar min-w-0 pr-4 flex-1">
+                        {tabs && tabs.length > 0 ? tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => onTabChange?.(tab.id)}
+                                className={`flex items-center gap-2 py-2 text-[11px] font-semibold uppercase tracking-widest transition-all relative whitespace-nowrap ${activeTab === tab.id ? 'text-primary' : 'text-text-muted hover:text-text-heading'}`}
+                            >
+                                <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
+                                {tab.label}
+                                {activeTab === tab.id && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary animate-in fade-in duration-300" />}
+                            </button>
+                        )) : <div className="flex-1" />}
+                    </div>
+
+                    <div className="flex flex-wrap items-center lg:justify-end gap-3 flex-shrink-0">
+                        {showPeriodSelector && <PeriodSelector />}
+                        {children}
+                        {onRefresh && (
+                            <div className="border-l border-border/50 pl-3">
+                                <RefreshButton onClick={onRefresh} loading={loading ?? false} />
+                            </div>
+                        )}
+                        <div className="flex items-center gap-3 border-l border-border/50 pl-3">
+                            {lastUpdate && <DataFreshnessBadge lastUpdate={lastUpdate} />}
+                            {(sourceFile || lastUpdate) && (
+                                <div className="flex flex-col text-right">
+                                    {sourceFile && (
+                                        <span className="text-[8px] text-text-muted font-medium uppercase tracking-tighter truncate max-w-[150px]" title={sourceFile}>
+                                            ARQ: {sourceFile}
+                                        </span>
+                                    )}
+                                    {lastUpdate && (
+                                        <span className="text-[8px] text-text-muted font-medium uppercase tracking-tighter">
+                                            UPD: {lastUpdate}
+                                        </span>
+                                    )}
+                                </div>
                             )}
-                            {sourceFile && (
-                                <p className="text-[9px] text-text-muted font-semibold uppercase tracking-tight leading-relaxed">
-                                    Arquivo: <span className="text-text-heading/70 font-semibold">{sourceFile}</span>
-                                </p>
-                            )}
-                            {lastUpdate && (
-                                <p className="text-[9px] text-text-muted font-semibold uppercase tracking-tight leading-relaxed">
-                                    Último Update: <span className="text-text-heading/70 font-semibold">{lastUpdate}</span>
-                                </p>
-                            )}
-                            {lastUpdate && <div className="flex justify-end mt-1"><DataFreshnessBadge lastUpdate={lastUpdate} /></div>}
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     )
 }

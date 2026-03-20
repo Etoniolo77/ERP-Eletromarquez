@@ -40,71 +40,99 @@ export function ParetoChart({ data }: ParetoChartProps) {
     })
 
     const maxVal = Math.max(...data.map(d => d.value))
+    
+    // Altura do gráfico deve ser proporcional ao número de itens para não ficar apertado?
+    // Não, o usuário pediu LARGURA dinâmica no eixo X.
+    // Em um gráfico de barras verticais (Pareto tradicional), o eixo X é horizontal.
+    // Se temos muitos itens, a largura deve aumentar e permitir scroll.
+    const minWidth = data.length > 6 ? data.length * 80 : '100%'
 
     return (
-        <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart
-                data={enriched}
-                layout="vertical"
-                margin={{ top: 5, right: 55, left: 0, bottom: 5 }}
-            >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="var(--border)" strokeOpacity={0.4} />
-                <XAxis
-                    type="number"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'currentColor', fontSize: 10, fillOpacity: 0.5 }}
-                    domain={[0, maxVal > 0 ? Math.ceil(maxVal * 1.1) : 10]}
-                    allowDecimals={false}
-                />
-                <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    type="number"
-                    domain={[0, 100]}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'var(--primary)', fontSize: 10, fillOpacity: 0.8 }}
-                    tickFormatter={(v) => `${v}%`}
-                    width={40}
-                />
-                <YAxis
-                    type="category"
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    width={200}
-                    tick={{ fill: 'currentColor', fontSize: 10, fillOpacity: 0.8 }}
-                    tickFormatter={(v: string) => v.length > 28 ? v.slice(0, 28) + '…' : v}
-                />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--border)', opacity: 0.2 }} />
-                <Legend
-                    verticalAlign="top"
-                    align="right"
-                    height={28}
-                    iconType="circle"
-                    wrapperStyle={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}
-                />
-                <Bar dataKey="value" name="Ocorrências" radius={[0, 4, 4, 0]} maxBarSize={28}>
-                    {enriched.map((entry, index) => (
-                        <Cell
-                            key={`cell-${index}`}
-                            fill="#ef4444"
-                            fillOpacity={1 - (index * 0.12)}
+        <div className="w-full h-full overflow-x-auto custom-scroll relative">
+            <div style={{ minWidth: minWidth, height: '100%' }}>
+                <ResponsiveContainer width="100%" height={320}>
+                    <ComposedChart
+                        data={enriched}
+                        margin={{ top: 20, right: 40, left: 10, bottom: 60 }}
+                    >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" strokeOpacity={0.4} />
+                        <XAxis
+                            dataKey="name"
+                            axisLine={false}
+                            tickLine={false}
+                            interval={0}
+                            tick={(props: any) => {
+                                const { x, y, payload } = props;
+                                const text = payload.value;
+                                const truncated = text.length > 15 ? text.slice(0, 15) + '…' : text;
+                                return (
+                                    <g transform={`translate(${x},${y})`}>
+                                        <text
+                                            x={0}
+                                            y={0}
+                                            dy={16}
+                                            textAnchor="end"
+                                            fill="currentColor"
+                                            className="text-[9px] font-bold uppercase fill-text-muted"
+                                            transform="rotate(-35)"
+                                        >
+                                            {truncated}
+                                        </text>
+                                    </g>
+                                );
+                            }}
                         />
-                    ))}
-                </Bar>
-                <Line
-                    yAxisId="right"
-                    dataKey="cumPct"
-                    name="% Acumulado"
-                    type="monotone"
-                    stroke="var(--primary)"
-                    strokeWidth={2}
-                    dot={{ fill: 'var(--primary)', r: 4, strokeWidth: 0 }}
-                    activeDot={{ r: 6 }}
-                />
-            </ComposedChart>
-        </ResponsiveContainer>
+                        <YAxis
+                            yAxisId="left"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: 'currentColor', fontSize: 10, fillOpacity: 0.5 }}
+                            label={{ value: 'Ocorrências', angle: -90, position: 'insideLeft', offset: 0, fontSize: 9, fontWeight: '700', fill: 'var(--text-muted)' }}
+                            domain={[0, maxVal > 0 ? Math.ceil(maxVal * 1.1) : 10]}
+                            allowDecimals={false}
+                        />
+                        <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            type="number"
+                            domain={[0, 100]}
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: 'var(--primary)', fontSize: 10, fillOpacity: 0.8 }}
+                            tickFormatter={(v) => `${v}%`}
+                            width={40}
+                        />
+                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--border)', opacity: 0.1 }} />
+                        <Legend
+                            verticalAlign="top"
+                            align="right"
+                            height={36}
+                            iconType="circle"
+                            wrapperStyle={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                        />
+                        <Bar yAxisId="left" dataKey="value" name="Ocorrências" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                            {enriched.map((entry, index) => (
+                                <Cell
+                                    key={`cell-${index}`}
+                                    fill={index === 0 ? "#f43f5e" : "#fb7185"}
+                                    fillOpacity={0.9}
+                                />
+                            ))}
+                        </Bar>
+                        <Line
+                            yAxisId="right"
+                            dataKey="cumPct"
+                            name="% Acumulado"
+                            type="monotone"
+                            stroke="var(--primary)"
+                            strokeWidth={3}
+                            dot={{ fill: 'var(--primary)', r: 4, strokeWidth: 0 }}
+                            activeDot={{ r: 6 }}
+                        />
+                    </ComposedChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
     )
 }
+

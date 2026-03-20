@@ -90,7 +90,22 @@ export default function TurmasRDOPage() {
                 lastUpdate={dashData.last_update}
                 onRefresh={() => loadData(true)}
                 loading={loading}
-            />
+                showPeriodSelector={true}
+            >
+                <div className="flex items-center gap-1.5 ml-1">
+                    <span className="material-symbols-outlined text-[14px] text-primary">filter_alt</span>
+                    <select
+                        value={regional}
+                        onChange={(e) => setRegional(e.target.value)}
+                        className="bg-transparent border-none outline-none text-[9px] font-bold uppercase tracking-tighter text-text-heading cursor-pointer min-w-[100px]"
+                    >
+                        <option value="all">Todas Regionais</option>
+                        <option value="Itarana">ITARANA</option>
+                        <option value="Nova Venécia">NOVA VENÉCIA</option>
+                        <option value="Venda Nova do Imigrante">VENDA NOVA</option>
+                    </select>
+                </div>
+            </PageHeader>
 
             {/* KPI Grid */}
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
@@ -129,16 +144,6 @@ export default function TurmasRDOPage() {
                         <span className="material-symbols-outlined text-primary text-[18px]">analytics</span>
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Matriz de Desempenho Operacional</h3>
                     </div>
-                    <select
-                        value={regional}
-                        onChange={(e) => setRegional(e.target.value)}
-                        className="bg-surface border border-border outline-none text-[10px] font-semibold uppercase tracking-tighter text-text-heading cursor-pointer px-3 py-1 rounded-sm shadow-sm hover:border-primary/50 transition-colors"
-                    >
-                        <option value="all">Todas Regionais</option>
-                        <option value="Itarana">ITARANA</option>
-                        <option value="Nova Venécia">NOVA VENÉCIA</option>
-                        <option value="Venda Nova do Imigrante">VENDA NOVA</option>
-                    </select>
                 </div>
 
                 <div className="overflow-x-scroll overflow-y-auto custom-scrollbar relative max-h-[600px] w-full">
@@ -162,14 +167,14 @@ export default function TurmasRDOPage() {
                                         <td className={`py-1 px-3 pl-6 border-r border-border sticky left-0 bg-inherit z-10 uppercase min-w-[420px] whitespace-nowrap text-[12px] ${isFooter ? 'text-primary font-semibold' : 'text-text-heading font-semibold'}`}>
                                             {row.indicador}
                                         </td>
-                                        <td className={`py-1 px-3 text-center border-r border-border tabular-nums text-[14px] font-medium ${row.media_ind < 95 ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                                        <td className={`py-1 px-3 text-center border-r border-border tabular-nums text-[12px] font-medium ${row.media_ind < 95 ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
                                             {row.media_ind}%
                                         </td>
                                         {dashData.indicadores_labels?.map((eq, c_idx) => {
                                             const val = row[eq]
                                             const isBad = val < 95;
                                             return (
-                                                <td key={c_idx} className={`py-1 px-3 text-center border-r border-border last:border-r-0 tabular-nums text-[15px] font-semibold ${isBad ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-slate-600'}`}>
+                                                <td key={c_idx} className={`py-1 px-3 text-center border-r border-border last:border-r-0 tabular-nums text-[13px] font-semibold ${isBad ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-slate-600'}`}>
                                                     {val !== undefined ? `${val}%` : '-'}
                                                 </td>
                                             )
@@ -272,21 +277,38 @@ export default function TurmasRDOPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {dashData.matriz_presenca?.map((row, idxP) => (
-                                    <tr key={idxP} className="hover:bg-surface/50 transition-colors">
-                                        <td className="py-2 px-3 text-text-heading uppercase font-semibold sticky left-0 bg-inherit border-r border-border truncate min-w-[200px] text-[12px]">
-                                            {row.funcao}
-                                        </td>
-                                        <td className={`py-2 px-3 text-center border-r border-border bg-primary/[0.05] tabular-nums text-[14px] font-medium min-w-[110px] w-[110px] ${row.media_func < 95 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                                            {row.media_func}%
-                                        </td>
-                                        {dashData.regionais_presenca_labels?.map(reg => (
-                                            <td key={reg} className={`py-2 px-3 text-center border-r border-border last:border-r-0 tabular-nums text-[15px] font-semibold min-w-[110px] w-[110px] ${row[reg] < 95 ? 'text-rose-500' : 'text-slate-500'}`}>
-                                                {row[reg]}%
+                                {(() => {
+                                    const roleOrder = [
+                                        "Gerente de Base",
+                                        "Supervisor",
+                                        "Administrativo",
+                                        "Técnico de Segurança",
+                                        "Controlador de Frota",
+                                        "Almoxarife"
+                                    ];
+                                    
+                                    const sortedMatriz = [...(dashData.matriz_presenca || [])].sort((a, b) => {
+                                        const posA = roleOrder.findIndex(r => r.toLowerCase() === a.funcao?.toLowerCase());
+                                        const posB = roleOrder.findIndex(r => r.toLowerCase() === b.funcao?.toLowerCase());
+                                        return (posA === -1 ? 999 : posA) - (posB === -1 ? 999 : posB);
+                                    });
+
+                                    return sortedMatriz.map((row, idxP) => (
+                                        <tr key={idxP} className="hover:bg-surface/50 transition-colors">
+                                            <td className="py-2 px-3 text-text-heading uppercase font-semibold sticky left-0 bg-inherit border-r border-border truncate min-w-[200px] text-[12px]">
+                                                {row.funcao}
                                             </td>
-                                        ))}
-                                    </tr>
-                                ))}
+                                            <td className={`py-2 px-3 text-center border-r border-border bg-primary/[0.05] tabular-nums text-[14px] font-medium min-w-[110px] w-[110px] ${row.media_func < 95 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                                {row.media_func}%
+                                            </td>
+                                            {dashData.regionais_presenca_labels?.map(reg => (
+                                                <td key={reg} className={`py-2 px-3 text-center border-r border-border last:border-r-0 tabular-nums text-[15px] font-semibold min-w-[110px] w-[110px] ${row[reg] < 95 ? 'text-rose-500' : 'text-slate-500'}`}>
+                                                    {row[reg]}%
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ));
+                                })()}
                             </tbody>
                         </table>
                     </div>
@@ -306,7 +328,7 @@ export default function TurmasRDOPage() {
                                 { key: 'Venda Nova do Imigrante', color: '#f59e0b', label: 'VENDA NOVA' }
                             ]}
                             isCurrency={false}
-                            yDomain={[50, 100]}
+                            yDomain={[70, 100]}
                             tooltipLabel="Nota (%)"
                         />
                     </div>

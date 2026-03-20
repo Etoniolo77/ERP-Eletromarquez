@@ -302,14 +302,15 @@ def get_turmas_rdo_dashboard(
                 if "ALMOXARIFE" in f_norm or "ALMOXARIFADO" in f_norm: return "Almoxarife"
                 if "FROTA" in f_norm: return "Controlador de Frota"
                 if "GERENTE" in f_norm: return "Gerente de Base"
-                if "SEGURANCA" in f_norm or "SESMT" in f_norm: return "Tecnico de Segurança"
+                if "SEGURANCA" in f_norm or "SESMT" in f_norm: return "Técnico de Segurança"
                 if "SUPERVISOR" in f_norm: return "Supervisor"
+                if "ADMINISTRA" in f_norm or "ADM" in f_norm: return "Administrativo"
                 return None
             
             # Lista de todas as regionais que devem aparecer como COULNAS
             active_regionals = sorted(df_pres["Regional"].unique().tolist())
             # Lista de todas as funções que devem aparecer como LINHAS
-            target_rows = ["Almoxarife", "Controlador de Frota", "Gerente de Base", "Tecnico de Segurança", "Supervisor"]
+            target_rows = ["Gerente de Base", "Supervisor", "Administrativo", "Técnico de Segurança", "Controlador de Frota", "Almoxarife"]
 
             df_pres_mapped = df_pres_filtered.copy()
             df_pres_mapped["Funcao_Mapped"] = df_pres_mapped["Funcao"].apply(map_func)

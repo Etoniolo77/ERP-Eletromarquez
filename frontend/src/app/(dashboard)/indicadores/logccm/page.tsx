@@ -374,6 +374,14 @@ export default function LogCcmPage() {
                 lastUpdate={data?.last_update}
                 onRefresh={() => loadData(true)}
                 loading={loading}
+                showPeriodSelector={true}
+                tabs={[
+                    { id: 'resumo', label: 'Resumo Grupo Material', icon: 'list_alt' },
+                    { id: 'matriz', label: 'Balanço Depósitos', icon: 'grid_view' },
+                    { id: 'ruptura', label: 'Análise Ruptura', icon: 'warning' }
+                ]}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
             />
 
             {/* KPI Grid */}
@@ -383,25 +391,6 @@ export default function LogCcmPage() {
                 <KpiCard title="Faltas (R$)" value={formatMi(kpis.valor_faltas)} icon="trending_down" colorValue="danger" showVariation={false} />
                 <KpiCard title="Sobras (R$)" value={formatMi(kpis.valor_sobras)} icon="trending_up" colorValue="success" showVariation={false} />
                 <KpiCard title="Balanço Final" value={formatMi(kpis.compensacao)} icon="balance" colorValue="warning" showVariation={false} />
-            </div>
-
-            {/* Tabs Navigation */}
-            <div className="flex items-center gap-8 border-b border-border px-2 pt-2">
-                {[
-                    { id: 'resumo', label: 'Resumo Grupo Material', icon: 'list_alt' },
-                    { id: 'matriz', label: 'Balanço Depósitos', icon: 'grid_view' },
-                    { id: 'ruptura', label: 'Análise Ruptura', icon: 'warning' }
-                ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 pb-3 text-[12px] font-semibold uppercase tracking-widest transition-all relative ${activeTab === tab.id ? 'text-primary' : 'text-text-muted hover:text-text-heading'}`}
-                    >
-                        <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
-                        {tab.label}
-                        {activeTab === tab.id && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary animate-in fade-in duration-300" />}
-                    </button>
-                ))}
             </div>
 
             {/* Tab Body */}
@@ -433,7 +422,7 @@ export default function LogCcmPage() {
                                         <th className="p-2 text-right">Faltas</th>
                                         <th className="p-2 text-right">Sobras</th>
                                         <th className="p-2 text-right">S/ Pedalada</th>
-                                        <th className="p-2 text-right text-rose-500 underline decoration-rose-500/20 underline-offset-4">Ofn (Pedalada)</th>
+                                        <th className="p-2 text-right text-rose-500 underline decoration-rose-500/20 underline-offset-4">ONF (Pedalada)</th>
                                         <th className="p-2 text-right bg-primary/5 text-primary">Balanço Net</th>
                                     </tr>
                                 </thead>

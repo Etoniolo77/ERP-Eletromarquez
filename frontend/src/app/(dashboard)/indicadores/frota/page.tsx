@@ -11,6 +11,7 @@ import { DashboardSkeleton } from "@/components/ui/PageSkeleton"
 import { PageError } from "@/components/ui/PageError"
 import { formatCurrencyCompact, CHART_COLORS } from "@/lib/utils"
 import { EmptyState } from "@/components/ui/EmptyState"
+import { useFilter } from "@/components/providers/FilterProvider"
 
 interface FrotaDashboard {
     period_label: string
@@ -72,8 +73,8 @@ const renderPercentageLabel = ({ cx = 0, cy = 0, midAngle = 0, innerRadius = 0, 
 };
 
 export default function FrotaPage() {
+    const { period: periodo } = useFilter()
     const [data, setData] = useState<FrotaDashboard | null>(null)
-    const [periodo, setPeriodo] = useState<string>("all")
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [mounted, setMounted] = useState(false)
@@ -196,7 +197,30 @@ export default function FrotaPage() {
                 lastUpdate={data.last_update}
                 onRefresh={() => loadData(true)}
                 loading={loading}
-            />
+                showPeriodSelector={true}
+            >
+                {/* Outros Filtros na Toolbar */}
+                <div className="flex items-center gap-1.5 ml-1">
+                    <span className="material-symbols-outlined text-[14px] text-primary">filter_alt</span>
+                    <select
+                        value={filterRegional}
+                        onChange={(e) => setFilterRegional(e.target.value)}
+                        className="bg-transparent border-none outline-none text-[9px] font-bold uppercase tracking-tighter text-text-heading cursor-pointer min-w-[100px]"
+                    >
+                        <option value="">Região (Todas)</option>
+                        {custosRegional.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                    </select>
+                    <div className="w-px h-3 bg-border mx-0.5" />
+                    <select
+                        value={filterSetor}
+                        onChange={(e) => setFilterSetor(e.target.value)}
+                        className="bg-transparent border-none outline-none text-[9px] font-bold uppercase tracking-tighter text-text-heading cursor-pointer min-w-[100px]"
+                    >
+                        <option value="">Setor (Todos)</option>
+                        {custosSetor.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                    </select>
+                </div>
+            </PageHeader>
 
             {/* KPI Grid */}
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
@@ -235,40 +259,6 @@ export default function FrotaPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                        {/* Unified Controls */}
-                        <div className="flex items-center gap-2 bg-surface border border-border px-2 py-1 rounded-sm shadow-sm">
-                            <span className="material-symbols-outlined text-[14px] text-primary">calendar_month</span>
-                            <select
-                                value={periodo}
-                                onChange={(e) => setPeriodo(e.target.value)}
-                                className="bg-transparent border-none outline-none text-[10px] font-semibold uppercase tracking-tighter text-text-heading cursor-pointer"
-                            >
-                                <option value="all">Todo Histórico (2025+)</option>
-                                {[...filteredHistory].reverse().map(h => (
-                                    <option key={h.MesAno} value={h.MesAno}>{h.MesAno}</option>
-                                ))}
-                            </select>
-                            <div className="w-px h-3 bg-border mx-1" />
-                            <span className="material-symbols-outlined text-[14px] text-primary">filter_alt</span>
-                            <select
-                                value={filterRegional}
-                                onChange={(e) => setFilterRegional(e.target.value)}
-                                className="bg-transparent border-none outline-none text-[10px] font-semibold uppercase tracking-tighter text-text-heading cursor-pointer min-w-[120px]"
-                            >
-                                <option value="">Região (Todas)</option>
-                                {custosRegional.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-                            </select>
-                            <div className="w-px h-3 bg-border mx-1" />
-                            <select
-                                value={filterSetor}
-                                onChange={(e) => setFilterSetor(e.target.value)}
-                                className="bg-transparent border-none outline-none text-[10px] font-semibold uppercase tracking-tighter text-text-heading cursor-pointer min-w-[120px]"
-                            >
-                                <option value="">Setor (Todos)</option>
-                                {custosSetor.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-                            </select>
-                        </div>
-
                         <div className="bg-surface p-1 rounded-sm flex gap-1 border border-border/10 shadow-sm ml-2">
                             <button
                                 onClick={() => setCompareMode("regional")}

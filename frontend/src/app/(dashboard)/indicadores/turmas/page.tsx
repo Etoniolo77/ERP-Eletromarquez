@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { KpiCard } from "@/components/dashboard/KpiCard"
 import { CsdBarChart } from "@/components/dashboard/CsdBarChart"
 import { RefreshButton } from "@/components/ui/RefreshButton"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import api from "@/lib/api"
 import { triggerSync } from "@/lib/sync"
 
@@ -15,12 +16,15 @@ interface DashboardData {
     stats: {
         media_prod: number
         trend_prod: number
+        media_ociosidade?: number
+        trend_ociosidade?: number
         total_ociosidade_hrs: number
         total_desvios_hrs: number
         total_notas: number
         total_rejeicoes: number
         total_equipes: number
         atingimento_meta: number
+        num_dias?: number
     }
     chart: {
         labels: string[]
@@ -35,6 +39,7 @@ interface DashboardData {
         acima_meta: number
         produtividade: number
         ociosidade: number
+        desvios?: number
         equipes: { equipe: string, prod: number }[]
     }[]
     insights: { type: 'success' | 'warning' | 'danger' | 'info', text: string }[]
@@ -109,43 +114,20 @@ export default function TurmasPage() {
     }))
 
     return (
-        <div className="p-4 space-y-4 animate-in fade-in duration-700">
+        <div className="p-4 pt-1 pb-2 space-y-2 animate-in fade-in duration-700">
             <TeamDrawer team={drawerTeam} onClose={() => setDrawerTeam(null)} period={period} />
-            {/* Header Area - Redesigned with Insights Card */}
-            <div className="flex flex-col md:flex-row items-stretch justify-between gap-4">
-                {/* Large Insights Card occupying the old title space */}
-                <div className="flex-1 bg-surface border border-border p-4 min-h-[105px] rounded-sm flex items-stretch gap-6 shadow-sm">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 self-center">
-                        <span className="material-symbols-outlined text-primary text-[28px]">analytics</span>
-                    </div>
-                    <div className="flex-1 flex flex-col justify-between py-1">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <h3 className="text-[9px] font-semibold uppercase text-text-muted tracking-widest">Inteligência de Dados e Insights</h3>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
-                            {dashData.insights?.slice(0, 2).map((ins, i: number) => (
-                                <p key={i} className="text-[11px] font-medium text-text-heading leading-tight border-l-2 border-primary/30 pl-3">
-                                    {ins.text.replace(/(\d+(\.\d+)?)(%)/g, (_match: string, p1: string) => `${parseFloat(p1).toFixed(1)}%`)}
-                                </p>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Right Side: Refresh and Metadata */}
-                <div className="flex flex-col items-end justify-center gap-2 min-w-[240px]">
-                    <RefreshButton onClick={() => loadData(true)} loading={loading} />
-                    <div className="text-right">
-                        <p className="text-[9px] text-text-muted font-semibold uppercase tracking-tight leading-relaxed">
-                            Arquivo: <span className="text-text-heading/70 font-medium">{dashData.source_file}</span>
-                        </p>
-                        <p className="text-[9px] text-text-muted font-medium uppercase tracking-tight leading-relaxed">
-                            Último Update: <span className="text-text-heading/70 font-medium">{dashData.last_update}</span>
-                        </p>
-                    </div>
-                </div>
-            </div>
+            {/* Header Area */}
+            <PageHeader
+                icon="analytics"
+                title="Gestão de Tempos CCM e Insights"
+                insights={dashData.insights}
+                fallbackText={`Monitoramento Tático e Produtividade consolidado.`}
+                sourceFile={dashData.source_file}
+                lastUpdate={dashData.last_update}
+                onRefresh={() => loadData(true)}
+                loading={loading}
+                showPeriodSelector={true}
+            />
 
             {/* KPI Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -186,6 +168,47 @@ export default function TurmasPage() {
                         }
                     </p>
                 </div>
+            </div>
+
+            {/* Sequence of 3 Operational Charts */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                    { id: 'ocupacao', label: 'Produtividade', meta: dashData.meta_prod, unit: '%', icon: 'trending_up', color: 'text-emerald-500' },
+                    { id: 'ociosidade', label: 'Média Ociosidade', meta: 15, unit: 'min', icon: 'schedule', color: 'text-amber-500' },
+                    { id: 'desvios', label: 'Média Desvios', meta: 10, unit: 'min', icon: 'error', color: 'text-rose-500' }
+                ].map((m) => {
+                    // Adaptando dados de dashData para o formato de gráfico (convertendo h acumulada para min médio)
+                    const nDias = dashData.stats.num_dias || 1
+                    const chartData = m.id === 'ocupacao' ? 
+                        dashData.chart.labels.map((l, i) => ({ name: l, prod: dashData.chart.data[i] })) :
+                        dashData.breakdown_csd.map(c => ({ 
+                            name: c.name, 
+                            prod: m.id === 'ociosidade' ? (c.ociosidade || 0) : (c.desvios || 0)
+                        })) 
+
+                    return (
+                        <div key={m.id} className="bg-surface border border-border px-4 py-3 rounded-sm flex flex-col h-[320px] shadow-sm hover:border-primary/30 transition-all">
+                            <div className="flex flex-col gap-0.5 mb-4">
+                                <div className="flex items-center gap-2">
+                                    <span className={`material-symbols-outlined text-[16px] ${m.color}`}>
+                                        {m.icon}
+                                    </span>
+                                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-heading">
+                                        {m.label} por Regional
+                                    </h3>
+                                </div>
+                                <p className="text-[9px] text-text-muted font-medium uppercase">Meta: {m.meta}{m.unit}</p>
+                            </div>
+                            <div className="flex-1 w-full min-h-0">
+                                <CsdBarChart
+                                    data={chartData.sort((a, b) => b.prod - a.prod)}
+                                    meta={m.meta}
+                                    unit={m.unit}
+                                />
+                            </div>
+                        </div>
+                    )
+                })}
             </div>
 
             {/* Main Primary Chart Board */}

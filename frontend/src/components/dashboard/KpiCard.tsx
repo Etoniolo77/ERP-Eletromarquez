@@ -11,6 +11,8 @@ interface KpiCardProps {
     colorValue?: 'primary' | 'success' | 'danger' | 'warning' | 'slate'
     showVariation?: boolean
     trendMode?: 'up-is-good' | 'down-is-good'
+    variant?: 'default' | 'transparent'
+    subtitle?: string
 }
 
 const accentColors: Record<NonNullable<KpiCardProps['colorValue']>, string> = {
@@ -35,7 +37,9 @@ export function KpiCard({
     icon,
     colorValue = 'primary',
     showVariation = true,
-    trendMode = 'up-is-good'
+    trendMode = 'up-is-good',
+    variant = 'default',
+    subtitle
 }: KpiCardProps) {
     const accent = accentColors[colorValue]
     const isNegative = typeof variation === 'number' ? variation < 0 : variation?.toString().startsWith('-')
@@ -51,36 +55,42 @@ export function KpiCard({
         : '—'
 
     return (
-        <div className={`bg-white border border-slate-200 border-l-4 ${accent} rounded-sm px-4 py-3.5 min-h-[100px] flex flex-col justify-between transition-all hover:shadow-sm`}>
-            {/* Header */}
-            <div className="flex items-center gap-1.5 text-slate-400">
-                {icon && (
-                    <span className="material-symbols-outlined text-[13px] shrink-0 font-light">
+        <div className="bg-surface border border-border rounded-sm p-4 shadow-sm flex items-center justify-between transition-all hover:shadow-md hover:border-primary/20 group">
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">
+                        {title}
+                    </p>
+                    {subtitle && <p className="text-[9px] text-slate-400 font-medium uppercase">{subtitle}</p>}
+                    {showVariation && variation !== undefined && (
+                        <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${varClass} tabular-nums`}>
+                            {varLabel}
+                        </span>
+                    )}
+                </div>
+                
+                <h3 className="text-2xl font-bold text-slate-900 leading-none tracking-tight truncate">
+                    {value}
+                </h3>
+                
+                {target !== undefined && (
+                    <p className="text-[10px] text-slate-400 mt-2 font-medium">
+                        META: <span className="text-slate-600">{target}</span>
+                    </p>
+                )}
+            </div>
+
+            {icon && (
+                <div className={`ml-4 shrink-0 w-12 h-12 rounded-sm flex items-center justify-center transition-transform group-hover:scale-110 ${
+                    colorValue === 'danger' ? 'bg-rose-50 text-rose-500' :
+                    colorValue === 'success' ? 'bg-emerald-50 text-emerald-500' :
+                    colorValue === 'warning' ? 'bg-amber-50 text-amber-500' :
+                    'bg-primary/10 text-primary'
+                }`}>
+                    <span className="material-symbols-outlined text-[24px]">
                         {icon}
                     </span>
-                )}
-                <p className="text-[10px] uppercase font-semibold tracking-widest truncate">
-                    {title}
-                </p>
-            </div>
-
-            {/* Value + Badge */}
-            <div className="flex items-end justify-between gap-2 mt-2">
-                <p className="text-xl font-bold text-slate-900 leading-none tracking-tight truncate">
-                    {value}
-                </p>
-                {showVariation && (
-                    <span className={`shrink-0 text-[11px] font-semibold px-1.5 py-0.5 rounded ${varClass} tabular-nums whitespace-nowrap`}>
-                        {varLabel}
-                    </span>
-                )}
-            </div>
-
-            {/* Target */}
-            {target !== undefined && (
-                <p className="text-[10px] text-slate-400 mt-1.5">
-                    Meta: <span className="font-medium text-slate-600">{target}</span>
-                </p>
+                </div>
             )}
         </div>
     )

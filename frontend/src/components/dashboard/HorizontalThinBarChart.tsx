@@ -34,12 +34,6 @@ export function HorizontalThinBarChart({
                 margin={{ top: 5, right: 40, left: 10, bottom: 5 }}
                 barGap={0}
             >
-                <defs>
-                    <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor={color} stopOpacity={0.8} />
-                        <stop offset="100%" stopColor={secondaryColor} stopOpacity={1} />
-                    </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
                 <XAxis type="number" hide />
                 <YAxis
@@ -66,13 +60,13 @@ export function HorizontalThinBarChart({
                 />
                 <Bar
                     dataKey="value"
-                    fill={`url(#${gradientId})`}
+                    fill={color}
                     radius={[0, 10, 10, 0]}
                     barSize={12}
                     animationDuration={1500}
                 >
                     {data.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={`url(#${gradientId})`} />
+                        <Cell key={`cell-${index}`} fill={color} />
                     ))}
                 </Bar>
             </BarChart>

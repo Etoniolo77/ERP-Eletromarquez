@@ -36,10 +36,20 @@ interface DashboardData {
         total_rejeicoes: number
         total_equipes: number
         atingimento_meta: number
+        num_dias: number
     }
     chart: {
         labels: string[]
         data: number[]
+    }
+    charts: {
+        [key: string]: {
+            labels: string[]
+            data: number[]
+            prev1?: number[]
+            prev2?: number[]
+            labels_prev?: string[]
+        }
     }
     top_desvios: { motivo: string, qtd: number }[]
     top_piores: { equipe: string, csd: string, produtividade: number, ociosidade: number, saida_base: number, retorno_base: number, notas: number, rejeitadas: number, interrompidas: number }[]
@@ -47,10 +57,11 @@ interface DashboardData {
     breakdown_csd: {
         name: string
         num_equipes: number
-        acima_meta: number
         produtividade: number
         ociosidade: number
-        equipes: { equipe: string, prod: number }[]
+        desvios: number
+        saida: number
+        equipes: { equipe: string, prod: number, ociosidade?: number, saida?: number, desvios?: number }[]
     }[]
     insights: { type: 'success' | 'warning' | 'danger' | 'info', text: string }[]
 }
@@ -66,10 +77,8 @@ export default function CcmProdutividadePage() {
     const [mounted, setMounted] = useState(false)
     const [drawerTeam, setDrawerTeam] = useState<{ equipe: string; csd: string; produtividade: number; ociosidade: number; saida_base: number; retorno_base: number; notas: number; rejeitadas: number; interrompidas: number } | null>(null)
     const [compareMode, setCompareMode] = useState(false)
-    const [compareData, setCompareData] = useState<{ name: string; prod: number }[]>([])
     const isInitialMount = useRef(true)
     const abortRef = useRef<AbortController | null>(null)
-    const abortCompareRef = useRef<AbortController | null>(null)
 
     const loadData = async (forceSync = false) => {
         if (abortRef.current) abortRef.current.abort()
@@ -79,6 +88,7 @@ export default function CcmProdutividadePage() {
         try {
             if (forceSync) await triggerSync("produtividade_ccm")
 
+            // A métrica passada aqui agora afeta apenas o ranking e breakdown
             let url = `/produtividade/dashboard?periodo=${period}&view=${view}&sector=DEPC-CCM&metric=${metric}`
             if (selectedItem) {
                 const param = view === 'csd' ? 'csd' : 'equipe'
@@ -114,24 +124,6 @@ export default function CcmProdutividadePage() {
         day: "week", week: "month", month: "year", year: "year", latest: "month"
     }
 
-    useEffect(() => {
-        if (!compareMode) { setCompareData([]); return }
-        if (abortCompareRef.current) abortCompareRef.current.abort()
-        abortCompareRef.current = new AbortController()
-        const comparePeriod = COMPARE_PERIOD_MAP[period] ?? "month"
-        const url = `/produtividade/dashboard?periodo=${comparePeriod}&view=${view}&sector=DEPC-CCM&metric=${metric}`
-        api.get(url, { signal: abortCompareRef.current.signal })
-            .then(res => {
-                const d = res.data
-                if (d?.chart?.labels) {
-                    const sorted = d.chart.labels
-                        .map((lbl: string, i: number) => ({ name: lbl, prod: d.chart.data[i] }))
-                        .sort((a: { prod: number }, b: { prod: number }) => b.prod - a.prod)
-                    setCompareData(sorted)
-                }
-            })
-            .catch(() => {})
-    }, [compareMode, period, view, metric])
 
     // Hooks must be called unconditionally — before early returns
     const { sorted: sortedMelhores, sortKey: skM, sortDir: sdM, handleSort: hsM } = useSortableTable(dashData?.top_melhores ?? [])
@@ -141,14 +133,8 @@ export default function CcmProdutividadePage() {
     if (error) return <PageError error={`Erro no Motor de Gestão: ${error}`} onRetry={() => loadData()} />
     if (!dashData) return null
 
-    const chartDataRaw = dashData.chart.labels.map((label, i) => ({
-        name: label,
-        prod: dashData.chart.data[i]
-    }))
-    const chartData = [...chartDataRaw].sort((a, b) => b.prod - a.prod)
-
     return (
-        <div className="p-4 space-y-4 animate-in fade-in duration-700">
+        <div className="p-4 pt-1 pb-2 space-y-2 animate-in fade-in duration-700">
             <TeamDrawer team={drawerTeam} onClose={() => setDrawerTeam(null)} period={period} sector="DEPC-CCM" />
             {/* Header Area */}
             <PageHeader
@@ -159,23 +145,31 @@ export default function CcmProdutividadePage() {
                 lastUpdate={dashData.last_update}
                 onRefresh={() => loadData(true)}
                 loading={loading}
+                showPeriodSelector={true}
             />
 
             {/* KPI Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard
-                    title="Ocupação (Média)"
-                    value={`${dashData.stats.media_prod}%`}
+                    title="Aderência Geral"
+                    value={`${dashData.stats.atingimento_meta}%`}
                     variation={dashData.stats.trend_prod}
-                    target="Meta: 95%"
-                    icon="trending_up"
+                    target="Equipes na Meta"
+                    icon="verified"
                 />
                 <KpiCard
                     title="Ociosidade (Média)"
                     value={`${Math.round(dashData.stats.media_ociosidade || 0)} min`}
                     variation={dashData.stats.trend_ociosidade || 0}
-                    target={`Total: ${Math.round(dashData.stats.total_ociosidade_hrs * 60)} min`}
+                    target={`Acumulado: ${Math.round(dashData.stats.total_ociosidade_hrs)}h`}
                     icon="schedule"
+                    trendMode="down-is-good"
+                />
+                <KpiCard
+                    title="Desvios (Média)"
+                    value={`${Math.round(dashData.stats.total_desvios_hrs * 60 / (dashData.stats.total_equipes || 1) / (dashData.stats.num_dias || 1))} min`}
+                    target={`Total: ${Math.round(dashData.stats.total_desvios_hrs)}h`}
+                    icon="warning"
                     trendMode="down-is-good"
                 />
                 <KpiCard
@@ -184,14 +178,6 @@ export default function CcmProdutividadePage() {
                     variation={dashData.stats.trend_saida || 0}
                     target="Meta: 30 min"
                     icon="login"
-                    trendMode="down-is-good"
-                />
-                <KpiCard
-                    title="Retorno à Base (Média)"
-                    value={`${Math.round(dashData.stats.media_retorno_base || 0)} min`}
-                    variation={dashData.stats.trend_retorno || 0}
-                    target="Monitoramento"
-                    icon="logout"
                     trendMode="down-is-good"
                 />
             </div>
@@ -231,96 +217,117 @@ export default function CcmProdutividadePage() {
                     </div>
                 </div>
             </div>
+                     {/* Sequence of 3 Operational Charts */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                    { id: 'ocupacao', label: 'Ocupação Operacional', meta: 95, unit: '%', icon: 'trending_up', color: 'text-emerald-500' },
+                    { id: 'ociosidade', label: 'Tempo de Ociosidade', meta: 15, unit: 'min', icon: 'schedule', color: 'text-amber-500' },
+                    { id: 'desvios', label: 'Desvios de Percurso', meta: 10, unit: 'min', icon: 'warning', color: 'text-rose-500' }
+                ].map((m) => {
+                    const labels = dashData.charts[m.id].labels
+                    const current = dashData.charts[m.id].data
+                    const chartData = labels.map((label, i) => ({
+                        name: label,
+                        prod: current[i]
+                    })).sort((a, b) => m.id === 'ocupacao' ? b.prod - a.prod : a.prod - b.prod)
 
-            {/* Main Primary Chart Board */}
-            <div className="bg-surface border border-border px-4 py-2 rounded-sm flex flex-col h-[480px]">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10">
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-primary text-[18px]">query_stats</span>
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">
-                                {metric === 'ocupacao' ? 'Ocupação' : metric === 'ociosidade' ? 'Ociosidade' : 'Saída de Base'} por {view === 'csd' ? 'Regional' : 'Equipe'}
-                            </h3>
-                            {selectedItem && (
-                                <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold uppercase rounded-sm border border-primary/20 animate-pulse">
-                                    Filtrado: {selectedItem}
-                                </span>
-                            )}
+                    return (
+                        <div key={m.id} className="bg-surface border border-border px-4 py-3 rounded-sm flex flex-col h-[320px] shadow-sm hover:border-primary/30 transition-all">
+                            <div className="flex flex-col gap-0.5 mb-4">
+                                <div className="flex items-center gap-2">
+                                    <span className={`material-symbols-outlined text-[16px] ${m.color}`}>
+                                        {m.icon}
+                                    </span>
+                                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-heading">
+                                        {m.label}
+                                    </h3>
+                                </div>
+                                <p className="text-[9px] text-text-muted font-medium uppercase">Meta: {m.meta}{m.unit}</p>
+                            </div>
+                            <div className="flex-1 w-full min-h-0">
+                                <CsdBarChart
+                                    data={chartData}
+                                    meta={m.meta}
+                                    unit={m.unit}
+                                    variant="status"
+                                />
+                            </div>
                         </div>
-                        {selectedItem && (
-                            <button
-                                onClick={() => setSelectedItem(null)}
-                                className="text-[10px] text-primary hover:underline font-semibold uppercase text-left w-fit"
-                            >
-                                Limpar Filtro de Seleção ✕
-                            </button>
-                        )}
-                    </div>
+                    )
+                })}
+            </div>
 
-                    <div className="flex flex-col sm:flex-row items-center gap-4">
-                        {/* Seletor de Métrica */}
-                        <div className="bg-surface p-1 rounded-sm flex gap-1 border border-border/10 mr-4">
+            {/* Main Interactive Chart Sections (Selection affects table breakdown) */}
+            <div className="bg-surface border border-border p-4 rounded-sm flex flex-col shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-primary text-[18px]">analytics</span>
+                        </div>
+                        <div>
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-text-heading">
+                                Análise Detalhada: {metric === 'ocupacao' ? 'Produtividade' : metric === 'ociosidade' ? 'Ociosidade' : 'Desvios'}
+                            </h3>
+                            <p className="text-[10px] text-text-muted font-medium uppercase mt-0.5">Clique nas barras para filtrar por Regional</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="bg-slate-100 p-0.5 rounded-sm flex gap-0.5">
                             {[
-                                { id: 'ocupacao', label: 'Ocupação' },
-                                { id: 'ociosidade', label: 'Ociosidade' },
-                                { id: 'saida', label: 'Saída' }
-                            ].map((m) => (
+                                { id: 'ocupacao', label: 'PROD' },
+                                { id: 'ociosidade', label: 'OCIO' },
+                                { id: 'desvios', label: 'DESV' },
+                                { id: 'saida', label: 'SAÍDA' }
+                            ].map(btn => (
                                 <button
-                                    key={m.id}
-                                    onClick={() => setMetric(m.id)}
-                                    className={`text-[10px] uppercase font-bold px-3 py-1 rounded-sm transition-all ${metric === m.id ? 'bg-emerald-500 text-white shadow-sm' : 'text-text-muted hover:text-emerald-500/70'}`}
+                                    key={btn.id}
+                                    onClick={() => setMetric(btn.id)}
+                                    className={`text-[9px] font-bold uppercase px-3 py-1 rounded-sm transition-all ${metric === btn.id ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-slate-200'}`}
                                 >
-                                    {m.label}
+                                    {btn.label}
                                 </button>
                             ))}
                         </div>
-
-                        <div className="bg-surface p-1 rounded-sm flex gap-1 border border-border/10">
+                        <div className="h-4 w-px bg-border mx-1" />
+                        <div className="bg-slate-100 p-0.5 rounded-sm flex gap-0.5">
                             <button
                                 onClick={() => { setView('csd'); setSelectedItem(null); }}
-                                className={`text-[11px] uppercase font-semibold px-4 py-1.5 rounded-sm transition-all ${view === 'csd' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-primary'}`}
+                                className={`text-[9px] uppercase font-bold px-3 py-1 rounded-sm transition-all ${view === 'csd' ? 'bg-primary text-white' : 'text-text-muted hover:bg-slate-200'}`}
                             >
                                 Regional
                             </button>
                             <button
                                 onClick={() => { setView('equipe'); setSelectedItem(null); }}
-                                className={`text-[11px] uppercase font-semibold px-4 py-1.5 rounded-sm transition-all ${view === 'equipe' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-primary'}`}
+                                className={`text-[9px] uppercase font-bold px-3 py-1 rounded-sm transition-all ${view === 'equipe' ? 'bg-primary text-white' : 'text-text-muted hover:bg-slate-200'}`}
                             >
                                 Equipes
                             </button>
                         </div>
-                        <span className={`px-2 py-1 ${metric === 'ocupacao' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-rose-500/20 text-rose-500'} text-[11px] font-semibold uppercase rounded-sm border-none`}>
-                            Meta: {metric === 'ocupacao' ? '95%' : (metric === 'ociosidade' ? '15min' : '30min')}
-                        </span>
-                        <button
-                            onClick={() => setCompareMode(prev => !prev)}
-                            title="Comparar com período anterior"
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm text-[10px] font-bold uppercase transition-all ${compareMode ? 'bg-primary text-white' : 'border border-border text-text-muted hover:text-primary hover:border-primary/40'}`}
-                        >
-                            <span className="material-symbols-outlined text-[13px]">compare_arrows</span>
-                            Comparar
-                        </button>
                     </div>
                 </div>
 
-                <div className="flex-1 w-full">
+                <div className="h-[400px] w-full">
                     <CsdBarChart
-                        data={chartData}
-                        meta={metric === 'ocupacao' ? 95 : (metric === 'ociosidade' ? 15 : 30)}
+                        data={dashData.charts[metric].labels.map((l, i) => ({
+                            name: l,
+                            prod: dashData.charts[metric].data[i]
+                        })).sort((a, b) => metric === 'ocupacao' ? b.prod - a.prod : a.prod - b.prod)}
+                        meta={metric === 'ocupacao' ? 95 : metric === 'ociosidade' ? 15 : 10}
                         onBarClick={handleBarClick}
                         selectedBar={selectedItem}
                         unit={metric === 'ocupacao' ? '%' : 'min'}
-                        compareData={compareMode && compareData.length > 0 ? compareData : undefined}
-                        compareLabel={COMPARE_PERIOD_MAP[period] ?? "Anterior"}
+                        compareData={compareMode && dashData.charts[metric].prev1 ? dashData.charts[metric].labels.map((l, i) => ({ name: l, prod: dashData.charts[metric].prev1![i] })) : undefined}
+                        compareLabel={dashData.charts[metric].labels_prev?.[0] ?? "Anterior"}
                     />
                 </div>
             </div>
+        
 
             {/* Regional Breakdown Grid */}
             <div className="space-y-6">
                 <div className="flex items-center gap-4">
                     <h2 className="text-xs font-semibold text-text-muted uppercase tracking-widest flex-shrink-0">
-                        {metric === 'ocupacao' ? 'Ocupação' : metric === 'ociosidade' ? 'Ociosidade' : 'Saída de Base'} por Regional CCM
+                        {metric === 'ocupacao' ? 'Produtividade' : metric === 'ociosidade' ? 'Ociosidade' : metric === 'desvios' ? 'Desvios' : 'Saída de Base'} por Regional CCM
                     </h2>
                     <div className="h-px flex-1 bg-border/20" />
                 </div>
@@ -328,8 +335,8 @@ export default function CcmProdutividadePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {dashData.breakdown_csd?.map((csd: any, i: number) => {
                         const unit = metric === 'ocupacao' ? '%' : 'min'
-                        const meta_ref = metric === 'ocupacao' ? 95 : 30
-                        const isGood = metric === 'ocupacao' ? csd.produtividade >= meta_ref : (metric === 'ociosidade' ? csd.ociosidade <= meta_ref : csd.saida <= meta_ref)
+                        const meta_ref = metric === 'ocupacao' ? 95 : metric === 'desvios' ? 10 : 30
+                        const isGood = metric === 'ocupacao' ? csd.produtividade >= meta_ref : (metric === 'ociosidade' ? csd.ociosidade <= meta_ref : metric === 'desvios' ? (csd.desvios || 0) <= meta_ref : csd.saida <= meta_ref)
 
                         return (
                             <div key={i} className="bg-surface border border-border rounded-sm overflow-hidden flex flex-col group transition-all hover:border-primary/50 shadow-sm">
@@ -344,14 +351,14 @@ export default function CcmProdutividadePage() {
                                         </div>
                                         <div className="text-right">
                                             <p className={`text-xl font-semibold ${isGood ? 'text-emerald-500' : 'text-rose-500'} leading-none`}>
-                                                {metric === 'ociosidade' ? csd.ociosidade : (metric === 'saida' ? csd.saida : csd.produtividade)}{unit}
+                                                {metric === 'ociosidade' ? csd.ociosidade : (metric === 'saida' ? csd.saida : metric === 'desvios' ? csd.desvios : csd.produtividade)}{unit}
                                             </p>
                                         </div>
                                     </div>
 
                                     <div className="flex flex-col gap-2 bg-slate-50/30 -mx-5 -mb-5 p-4 border-t border-border/50 max-h-[560px] overflow-y-auto custom-scrollbar">
                                         {csd.equipes?.map((eq: any, j: number) => {
-                                            const val = metric === 'ociosidade' ? (eq.ociosidade || 0) : (metric === 'saida' ? (eq.saida || 0) : eq.prod)
+                                            const val = metric === 'ociosidade' ? (eq.ociosidade || 0) : (metric === 'saida' ? (eq.saida || 0) : metric === 'desvios' ? (eq.desvios || 0) : eq.prod)
                                             const pct = metric === 'ocupacao' ? Math.min((val / (meta_ref * 1.5)) * 100, 100) : Math.min((val / meta_ref) * 100, 100)
                                             const isEqGood = metric === 'ocupacao' ? val >= meta_ref : val <= meta_ref
                                             const barFill = isEqGood ? 'bg-blue-800' : 'bg-rose-500'
