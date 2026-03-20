@@ -1,219 +1,265 @@
 "use client"
 
-import React, { useEffect, useState, Suspense } from "react"
+import React, { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
-import { FilterProvider } from "@/components/providers/FilterProvider"
+import { useFilter, FilterProvider } from "@/components/providers/FilterProvider"
 import { URLPeriodSync } from "@/components/providers/URLPeriodSync"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { KpiCard } from "@/components/dashboard/KpiCard"
+import { TrendLineChart } from "@/components/dashboard/TrendLineChart"
+import { CsdBarChart } from "@/components/dashboard/CsdBarChart"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { CHART_COLORS, formatCurrencyCompact } from "@/lib/utils"
 
 export interface Insight {
   type: "success" | "warning" | "danger" | "info"
   text: string
 }
 
-interface GlobalStats {
-  ccmProd: number
-  ccmMetaAtingimento: number
-  ccmMeta: number
-  turmasProd: number
-  frotaCusto: number
-  aprAprovacao: number
-}
-
-function ExecutiveDashboardContent() {
+function ExecutiveSummaryContent() {
+  const { period } = useFilter()
   const searchParams = useSearchParams()
-  const periodo = searchParams.get("periodo") || "month"
+  const [stats, setStats] = useState({
+    ccm_prod: 0,
+    ccm_meta: 95,
+    ccm_trend: 0,
+    turmas_rdo: 0,
+    turmas_meta: 85,
+    frota_ticket: 0,
+    frota_trend: 0,
+    apr_media: 0,
+    apr_total: 0
+  })
+  const [insights, setInsights] = useState<Insight[]>([])
   const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState<GlobalStats | null>(null)
-  const [globalInsights, setGlobalInsights] = useState<Insight[]>([])
-  const [lastUpdate, setLastUpdate] = useState<string>("")
-
-  const fetchDashboardData = async () => {
-    setLoading(true)
-    try {
-      // Build the query string based on the current period
-      const query = new URLSearchParams()
-      if (periodo) query.set("periodo", periodo)
-
-      // Fetch all core modules in parallel
-      const [ccmRes, turmasRes, frotaRes, aprRes] = await Promise.all([
-        fetch(`/api/v1/produtividade/dashboard?${query.toString()}`).catch(() => null),
-        fetch(`/api/v1/turmas_rdo/dashboard?${query.toString()}`).catch(() => null),
-        fetch(`/api/v1/frota/dashboard?${query.toString()}`).catch(() => null),
-        fetch(`/api/v1/apr/dashboard?${query.toString()}`).catch(() => null)
-      ])
-
-      const ccmData = ccmRes?.ok ? await ccmRes.json() : null
-      const turmasData = turmasRes?.ok ? await turmasRes.json() : null
-      const frotaData = frotaRes?.ok ? await frotaRes.json() : null
-      const aprData = aprRes?.ok ? await aprRes.json() : null
-
-      // Aggregate Stats
-      setStats({
-        ccmProd: ccmData?.stats?.media_prod || 0,
-        ccmMetaAtingimento: ccmData?.stats?.atingimento_meta || 0,
-        ccmMeta: ccmData?.meta_prod || 85,
-        turmasProd: turmasData?.stats?.media_prod || 0,
-        frotaCusto: frotaData?.stats?.custo_total || 0,
-        aprAprovacao: aprData?.stats?.taxa_aprovacao || 0
-      })
-
-      // Aggregate Insights
-      const insights: Insight[] = []
-      
-      if (ccmData?.insights) {
-        ccmData.insights.forEach((i: any) => insights.push({ ...i, text: `[CCM] ${i.text}` }))
-      }
-      if (turmasData?.insights) {
-        turmasData.insights.forEach((i: any) => insights.push({ ...i, text: `[Turmas] ${i.text}` }))
-      }
-      if (frotaData?.insights) {
-        frotaData.insights.forEach((i: any) => insights.push({ ...i, text: `[Frota] ${i.text}` }))
-      }
-      if (aprData?.insights) {
-        aprData.insights.forEach((i: any) => insights.push({ ...i, text: `[SESMT] ${i.text}` }))
-      }
-
-      // Filter to show most critical insights first (danger > warning > info > success)
-      const sortedInsights = insights.sort((a, b) => {
-        const priority: Record<string, number> = { danger: 1, warning: 2, success: 3, info: 4 }
-        return (priority[a.type] || 5) - (priority[b.type] || 5)
-      })
-
-      setGlobalInsights(sortedInsights)
-      
-      const updateDate = new Date().toLocaleString("pt-BR", {
-        day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
-      })
-      setLastUpdate(updateDate)
-
-    } catch (e) {
-      console.error("Dashboard Global Fetch Error:", e)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [ccmChartData, setCcmChartData] = useState<{name: string; prod: number}[]>([])
+  const [frotaEvolucao, setFrotaEvolucao] = useState<any[]>([])
 
   useEffect(() => {
-    fetchDashboardData()
-  }, [periodo])
+    async function loadAllData() {
+      setLoading(true)
+      try {
+        const query = new URLSearchParams(searchParams.toString())
+        query.set("periodo", period)
+        if (period === "latest") query.set("periodo", "month") 
+
+        // Always fetch from Next.js API Routes (which will proxy or hit Supabase)
+        // Use relative URL so it works on browser on both localhost and Vercel.
+        const [ccmRes, turmasRes, frotaRes, aprRes] = await Promise.all([
+          fetch(`/api/v1/produtividade/dashboard?${query.toString()}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`/api/v1/turmas_rdo/dashboard?${query.toString()}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`/api/v1/frota/dashboard?${query.toString()}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`/api/v1/apr/dashboard?${query.toString()}`).then(r => r.ok ? r.json() : null).catch(() => null)
+        ])
+
+        const ccmData = ccmRes || null
+        const turmasData = turmasRes || null
+        const frotaData = frotaRes || null
+        const aprData = aprRes || null
+
+        // Aggregate Stats
+        setStats({
+          ccm_prod: ccmData?.stats?.media_prod || 0,
+          ccm_meta: ccmData?.meta_prod || 95,
+          ccm_trend: ccmData?.stats?.trend_prod || 0,
+          turmas_rdo: 0, // Not implemented yet
+          turmas_meta: 85,
+          frota_ticket: frotaData?.stats?.ticket_medio || 0,
+          frota_trend: frotaData?.stats?.trend_ticket || 0,
+          apr_media: aprData?.stats?.notas_exec_media || 0,
+          apr_total: aprData?.stats?.total_apr || 0
+        })
+
+        if (ccmData?.chart?.labels && ccmData?.chart?.data) {
+          setCcmChartData(ccmData.chart.labels.map((lbl: string, i: number) => ({
+            name: String(lbl),
+            prod: Number(ccmData.chart.data[i])
+          })).sort((a: any, b: any) => b.prod - a.prod))
+        } else {
+          setCcmChartData([])
+        }
+
+        if (frotaData?.history) {
+            setFrotaEvolucao(frotaData.history.map((h: any) => ({
+                name: h.MesAno,
+                Custo: h.Val
+            })))
+        } else {
+            setFrotaEvolucao([])
+        }
+
+        // Aggregate Insights
+        const allInsights: Insight[] = []
+        if (ccmData?.insights) allInsights.push(...ccmData.insights.map((i: any) => ({ ...i, text: `[Produtividade] ${i.text}` })))
+        if (turmasData?.insights) allInsights.push(...turmasData.insights.map((i: any) => ({ ...i, text: `[Turmas] ${i.text}` })))
+        if (frotaData?.insights) allInsights.push(...frotaData.insights.map((i: any) => ({ ...i, text: `[Frota] ${i.text}` })))
+        if (aprData?.insights) allInsights.push(...aprData.insights.map((i: any) => ({ ...i, text: `[SEG] ${i.text}` })))
+        
+        if (allInsights.length === 0) {
+            allInsights.push({ type: "info", text: "Nenhum alerta crítico para o período selecionado em nenhum dos módulos operacionais." })
+        }
+
+        setInsights(allInsights)
+      } catch (e) {
+        console.error("Dashboard Global Error:", e)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadAllData()
+  }, [period, searchParams])
 
   return (
-    <div className="flex-1 flex flex-col pt-0 p-4 lg:p-6 lg:pt-0 max-w-[1600px] mx-auto w-full gap-6">
+    <div className="p-4 space-y-4 animate-in fade-in duration-700">
       <PageHeader
-        icon="monitoring"
-        title="DASHBOARD EXECUTIVO"
-        fallbackText="Visão Consolidada de Resultado"
-        lastUpdate={lastUpdate}
-        onRefresh={fetchDashboardData}
+        title="Dashboard Executivo Global"
+        icon="language"
+        insights={loading ? [] : insights.slice(0, 1)}
         loading={loading}
         showPeriodSelector={true}
       />
 
-      {loading && !stats ? (
-        <div className="flex justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      ) : (
-        <>
-          {/* Top KPIs Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-             <KpiCard
-                title="Produtividade Global (CCM)"
-                subtitle="Equipes na Meta"
-                value={`${stats?.ccmProd.toFixed(1)}%`}
-                icon="engineering"
-                target={`${stats?.ccmMeta}%`}
-                variation={stats?.ccmMetaAtingimento}
-                colorValue="primary"
-                trendMode="up-is-good"
-             />
-             <KpiCard
-                title="Produtividade (Turmas)"
-                subtitle="Média Operacional"
-                value={`${stats?.turmasProd.toFixed(1)}%`}
-                icon="trending_up"
-                target="-"
-                showVariation={false}
-                colorValue="success"
-             />
-             <KpiCard
-                title="Custo Total (Frota)"
-                subtitle="Período"
-                value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats?.frotaCusto || 0)}
-                icon="local_shipping"
-                target="-"
-                showVariation={false}
-                colorValue="warning"
-             />
-             <KpiCard
-                title="APRs Válidas (SESMT)"
-                subtitle="Taxa de Aprovação"
-                value={`${stats?.aprAprovacao.toFixed(1)}%`}
-                icon="verified_user"
-                target="100%"
-                showVariation={false}
-                colorValue="danger"
-             />
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <KpiCard
+          title="Produtividade Geral (CCM)"
+          value={`${stats.ccm_prod.toFixed(1)}%`}
+          variation={stats.ccm_trend}
+          target={`Meta Institucional: ${stats.ccm_meta}%`}
+          icon="timer"
+        />
+        <KpiCard
+          title="Conformidade RDO (Turmas)"
+          value={`${stats.turmas_rdo}%`}
+          target={`Meta: ${stats.turmas_meta}%`}
+          icon="verified"
+        />
+        <KpiCard
+          title="Ticket Médio (Frota)"
+          value={formatCurrencyCompact(stats.frota_ticket)}
+          variation={stats.frota_trend}
+          target="Custo por Veículo"
+          icon="directions_car"
+          trendMode="down-is-good"
+        />
+        <KpiCard
+          title="Efetividade de SESMT / APR"
+          value={stats.apr_media.toFixed(1)}
+          target={`${stats.apr_total} Auditorias`}
+          icon="health_and_safety"
+        />
+      </div>
 
-          {/* Insights Region */}
-          <div className="grid gap-6">
-            <Card>
-              <CardHeader className="border-b border-border/50 pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                  <span className="material-symbols-outlined text-primary">campaign</span>
-                  Diagnóstico e Alertas Globais (CSD)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-border/50">
-                  {globalInsights.length > 0 ? (
-                    globalInsights.map((insight, idx) => (
-                      <div key={idx} className={`p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors ${insight.type === 'danger' ? 'bg-rose-50/20' : ''}`}>
-                        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                          insight.type === 'danger' ? 'bg-rose-100 text-rose-600' :
-                          insight.type === 'warning' ? 'bg-amber-100 text-amber-600' :
-                          insight.type === 'success' ? 'bg-emerald-100 text-emerald-600' :
-                          'bg-blue-100 text-blue-600'
-                        }`}>
-                          <span className="material-symbols-outlined text-[16px]">
-                            {insight.type === 'danger' ? 'error' :
-                             insight.type === 'warning' ? 'warning' :
-                             insight.type === 'success' ? 'check_circle' : 'info'}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0 pt-1.5">
-                           <p className={`text-sm tracking-tight ${insight.type === 'danger' ? 'font-bold text-rose-900' : 'font-medium text-slate-700'}`}>
-                             {insight.text}
-                           </p>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-8 text-center text-slate-500">
-                      Nenhum alerta crítico encontrado para o período.
-                    </div>
-                  )}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-surface border border-border px-4 py-3 rounded-sm flex flex-col h-[380px] shadow-sm hover:border-primary/30 transition-all">
+            <div className="flex flex-col gap-0.5 mb-2">
+                <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px] text-emerald-500">
+                        analytics
+                    </span>
+                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-heading">
+                        Aderência Operacional por Regional
+                    </h3>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </>
+                <p className="text-[9px] text-text-muted font-medium uppercase">Produtividade de Turmas CCM</p>
+            </div>
+            <div className="flex-1 w-full min-h-0 mt-2">
+                {ccmChartData.length > 0 ? (
+                    <CsdBarChart
+                        data={ccmChartData}
+                        meta={stats.ccm_meta}
+                        unit="%"
+                        variant="status"
+                    />
+                ) : (
+                    <div className="flex items-center justify-center h-full text-text-muted text-[11px] font-medium uppercase">
+                        Dados de produtividade não disponíveis para o período
+                    </div>
+                )}
+            </div>
+        </div>
+
+        <div className="bg-surface border border-border p-4 rounded-sm flex flex-col h-[380px] shadow-sm hover:border-primary/30 transition-all">
+            <div className="flex flex-col gap-0.5 mb-2">
+                <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px] text-primary">
+                        trending_down
+                    </span>
+                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-heading">
+                        Evolução Histórica Custo de Frota
+                    </h3>
+                </div>
+                <p className="text-[9px] text-text-muted font-medium uppercase">Custo Geral Mês a Mês</p>
+            </div>
+            <div className="flex-1 w-full relative mt-2">
+                {frotaEvolucao.length > 0 ? (
+                    <TrendLineChart
+                        data={frotaEvolucao}
+                        tooltipLabel="Custo Total"
+                        lines={[
+                            { key: 'Custo', color: CHART_COLORS[0], label: 'Custo R$' }
+                        ]}
+                    />
+                ) : (
+                    <div className="flex items-center justify-center h-full text-text-muted text-[11px] font-medium uppercase">
+                        Histórico de Frota não disponível
+                    </div>
+                )}
+            </div>
+        </div>
+      </div>
+
+      {insights.length > 0 && (
+        <Card className="bg-surface border-border shadow-sm rounded-sm">
+          <CardHeader className="pb-3 px-4 pt-4 border-b border-border bg-slate-50/50">
+            <CardTitle className="text-xs font-bold uppercase tracking-widest text-text-heading flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-primary">insights</span>
+              Diagnóstico Global Integrado
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 py-4 max-h-[250px] overflow-y-auto custom-scrollbar">
+            <div className="grid gap-3">
+              {insights.map((insight, idx) => {
+                const colors = {
+                  success: "bg-emerald-500 border-emerald-500",
+                  warning: "bg-amber-500 border-amber-500",
+                  danger: "bg-rose-500 border-rose-500",
+                  info: "bg-blue-500 border-blue-500"
+                }
+                const icons = {
+                  success: "check_circle",
+                  warning: "warning",
+                  danger: "error",
+                  info: "info"
+                }
+                return (
+                  <div key={idx} className="flex items-start gap-3 p-3 rounded-sm border border-border/50 bg-white/50 hover:bg-white transition-colors">
+                    <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${colors[insight.type]}`} />
+                    <p className="text-[11px] font-medium text-text-heading leading-relaxed">{insight.text}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
 }
 
-export default function ExecutiveDashboard() {
+export default function Dashboard() {
   return (
-    <FilterProvider>
-      <Suspense fallback={<div className="p-8 text-center">Iniciando...</div>}>
-         <URLPeriodSync />
-         <ExecutiveDashboardContent />
-      </Suspense>
-    </FilterProvider>
+    <Suspense fallback={
+      <div className="p-4 space-y-4">
+        <div className="h-24 bg-surface animate-pulse rounded-sm" />
+        <div className="grid grid-cols-4 gap-4"><div className="h-32 bg-surface animate-pulse rounded-sm" /><div className="h-32 bg-surface animate-pulse rounded-sm" /><div className="h-32 bg-surface animate-pulse rounded-sm" /><div className="h-32 bg-surface animate-pulse rounded-sm" /></div>
+        <div className="grid grid-cols-2 gap-4"><div className="h-64 bg-surface animate-pulse rounded-sm" /><div className="h-64 bg-surface animate-pulse rounded-sm" /></div>
+      </div>
+    }>
+      <FilterProvider>
+        <URLPeriodSync />
+        <ExecutiveSummaryContent />
+      </FilterProvider>
+    </Suspense>
   )
 }
