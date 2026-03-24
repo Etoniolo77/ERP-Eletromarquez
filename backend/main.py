@@ -14,7 +14,7 @@ from cache import api_cache
 # Criação das tabelas
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Portal de Indicadores 3.1 - API")
+app = FastAPI(title="Indicadores EM - API")
 
 # Habilitar CORS para o Frontend (Next.js)
 app.add_middleware(

@@ -1,10 +1,10 @@
 @echo off
-title ERP - Frontend
+title Indicadores EM - Frontend
 color 0B
 cd /d "%~dp0.."
 echo.
 echo ============================================
-echo   Iniciando Frontend (Next.js) em %CD%
+echo   Iniciando Indicadores EM (Next.js) em %CD%
 echo ============================================
 echo.
 

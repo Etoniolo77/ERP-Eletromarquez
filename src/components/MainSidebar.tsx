@@ -133,14 +133,14 @@ export function MainSidebar() {
         {!collapsed && (
           <div className="flex items-center gap-2 min-w-0">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-blue-600">
-              <span className="text-xs font-bold text-white">E</span>
+              <span className="text-xs font-bold text-white">I</span>
             </div>
-            <span className="text-sm font-semibold text-slate-900 truncate">Eletromarquez</span>
+            <span className="text-sm font-semibold text-slate-900 truncate">Indicadores EM</span>
           </div>
         )}
         {collapsed && (
           <div className="flex h-7 w-7 items-center justify-center rounded bg-blue-600 mx-auto">
-            <span className="text-xs font-bold text-white">E</span>
+            <span className="text-xs font-bold text-white">I</span>
           </div>
         )}
         <button

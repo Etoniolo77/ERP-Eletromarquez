@@ -1,9 +1,9 @@
 @echo off
-title ERP Eletromarquez
+title Indicadores EM
 color 0A
 
 echo ============================================
-echo   ERP Eletromarquez - Iniciando Sistema
+echo   Indicadores EM - Iniciando Sistema
 echo ============================================
 echo.
 

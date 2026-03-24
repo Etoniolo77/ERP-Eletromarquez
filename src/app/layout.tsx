@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ERP Empresarial",
-  description: "Sistema de Gestão Empresarial - Almoxarifado, SESMT, CCM, Turmas",
+  title: "Indicadores EM",
+  description: "Portal de Indicadores Operacionais - Almoxarifado, SESMT, CCM, Turmas",
 };
 
 export default function RootLayout({
