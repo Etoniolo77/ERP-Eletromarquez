@@ -62,12 +62,12 @@ function ExecutiveSummaryContent() {
           ccm_prod: ccmData?.stats?.media_prod || 0,
           ccm_meta: ccmData?.meta_prod || 95,
           ccm_trend: ccmData?.stats?.trend_prod || 0,
-          turmas_rdo: 0, // Not implemented yet
-          turmas_meta: 85,
-          frota_ticket: frotaData?.stats?.ticket_medio || 0,
+          turmas_rdo: turmasData?.stats?.aderencia_global || 0,
+          turmas_meta: turmasData?.meta || 85,
+          frota_ticket: frotaData?.stats?.media_por_veiculo || 0,
           frota_trend: frotaData?.stats?.trend_ticket || 0,
-          apr_media: aprData?.stats?.notas_exec_media || 0,
-          apr_total: aprData?.stats?.total_apr || 0
+          apr_media: aprData?.stats?.pct_conformidade || 0,
+          apr_total: aprData?.stats?.total_aprs || 0
         })
 
         if (ccmData?.chart?.labels && ccmData?.chart?.data) {

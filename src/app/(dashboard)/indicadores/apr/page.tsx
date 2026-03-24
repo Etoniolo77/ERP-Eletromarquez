@@ -57,7 +57,7 @@ export default function AprDigitalPage() {
         setLoading(true)
         setError(null)
         try {
-            if (forceSync) await triggerSync("apr")
+            // if (forceSync) await triggerSync("apr")
             const resp = await api.get(`/apr/dashboard?sector=${sector}&periodo=${period}`, { signal: abortRef.current.signal })
             setData(resp.data)
         } catch (err: any) {
@@ -109,7 +109,7 @@ export default function AprDigitalPage() {
 
     const lineChartData = (data.history?.labels ?? []).map((label: string, idx: number) => ({
         name: label,
-        value: data.history.values?.[idx] ?? 0
+        value: data.history?.values?.[idx] ?? 0
     }))
 
     return (
@@ -135,24 +135,24 @@ export default function AprDigitalPage() {
             <div className="grid gap-4 grid-cols-1 md:grid-cols-4">
                 <KpiCard
                     title="Aderência Global"
-                    value={`${stats.aderencia_global.toFixed(1)}%`}
-                    variation={stats.aderencia_var}
-                    target={`${data.meta}% Meta`}
+                    value={`${(stats?.aderencia_global ?? 0).toFixed(1)}%`}
+                    variation={stats?.aderencia_var ?? 0}
+                    target={`${data?.meta ?? 0}% Meta`}
                     icon="shield"
-                    colorValue={stats.aderencia_global >= data.meta ? "success" : "danger"}
+                    colorValue={(stats?.aderencia_global ?? 0) >= (data?.meta ?? 0) ? "success" : "danger"}
                 />
                 <KpiCard
                     title="Equipes Analisadas"
-                    value={`${stats.total_equipes}`}
-                    variation={stats.total_equipes_var}
+                    value={`${stats?.total_equipes ?? 0}`}
+                    variation={stats?.total_equipes_var ?? 0}
                     target="No Período"
                     icon="groups"
                     colorValue="primary"
                 />
                 <KpiCard
                     title="Abaixo da Meta"
-                    value={`${stats.equipes_fora_meta}`}
-                    variation={stats.equipes_fora_var}
+                    value={`${stats?.equipes_fora_meta ?? 0}`}
+                    variation={stats?.equipes_fora_var ?? 0}
                     target="GAP Operacional"
                     icon="warning"
                     colorValue="danger"
@@ -185,7 +185,7 @@ export default function AprDigitalPage() {
                             <h3 className="text-xs font-semibold uppercase tracking-widest text-text-heading">Evolução de Aderência na APR Digital</h3>
                             <p className="text-[10px] text-text-muted font-medium uppercase tracking-tight">Média aritmética simples da aderência por data.</p>
                         </div>
-                        <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-500 text-[9px] font-semibold uppercase rounded-sm border border-rose-500/20 shrink-0">Target: {data.meta}%</span>
+                        <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-500 text-[9px] font-semibold uppercase rounded-sm border border-rose-500/20 shrink-0">Target: {data?.meta ?? 0}%</span>
                     </div>
                     <div className="flex-1 w-full">
                         <ResponsiveContainer width="100%" height="100%">
@@ -214,7 +214,7 @@ export default function AprDigitalPage() {
                                     formatter={(v: any) => [`${v}%`, 'Conformidade']}
                                 />
                                 <ReferenceLine
-                                    y={data.meta}
+                                    y={data?.meta ?? 0}
                                     stroke="#f43f5e"
                                     strokeDasharray="4 4"
                                     strokeWidth={1}
@@ -252,9 +252,9 @@ export default function AprDigitalPage() {
                             <div key={i} className="py-1 px-3 bg-surface/50 border-b border-border/5 hover:border-emerald-500/20 transition-all group">
                                 <div className="flex justify-between items-center">
                                     <span className="text-[12px] font-semibold text-text-heading group-hover:text-emerald-500 uppercase truncate pr-1 flex-1">{eq.equipe}</span>
-                                    <span className="text-[13px] font-semibold text-emerald-500 tabular-nums shrink-0">{eq.efetividade.toFixed(1)}%</span>
+                                    <span className="text-[13px] font-semibold text-emerald-500 tabular-nums shrink-0">{(eq?.efetividade ?? 0).toFixed(1)}%</span>
                                 </div>
-                                <span className="text-[9px] text-text-muted font-medium uppercase tracking-widest leading-none block">{eq.regional}</span>
+                                <span className="text-[9px] text-text-muted font-medium uppercase tracking-widest leading-none block">{eq?.regional ?? "N/D"}</span>
                             </div>
                         ))}
                     </div>
@@ -273,9 +273,9 @@ export default function AprDigitalPage() {
                             <div key={i} className="py-1 px-3 bg-surface/50 border-b border-border/5 hover:border-rose-500/20 transition-all group">
                                 <div className="flex justify-between items-center">
                                     <span className="text-[12px] font-semibold text-text-heading group-hover:text-rose-500 uppercase truncate pr-1 flex-1">{eq.equipe}</span>
-                                    <span className="text-[13px] font-semibold text-rose-500 tabular-nums shrink-0">{eq.efetividade.toFixed(1)}%</span>
+                                    <span className="text-[13px] font-semibold text-rose-500 tabular-nums shrink-0">{(eq?.efetividade ?? 0).toFixed(1)}%</span>
                                 </div>
-                                <span className="text-[9px] text-text-muted font-medium uppercase tracking-widest leading-none block">{eq.regional}</span>
+                                <span className="text-[9px] text-text-muted font-medium uppercase tracking-widest leading-none block">{eq?.regional ?? "N/D"}</span>
                             </div>
                         ))}
                     </div>
@@ -297,12 +297,12 @@ export default function AprDigitalPage() {
                                 <div className="flex flex-col gap-0.5">
                                     <h3 className="text-[14px] font-semibold text-text-heading uppercase">{reg.name}</h3>
                                     <p className="text-[11px] text-text-muted font-medium uppercase">
-                                        <span className="text-blue-600 font-semibold">{reg.last_result.toFixed(1)}% ({data.period_label.toUpperCase()})</span> • {reg.total_equipes} equipes
+                                        <span className="text-blue-600 font-semibold">{(reg?.last_result ?? 0).toFixed(1)}% ({ (data?.period_label ?? "").toUpperCase()})</span> • {reg?.total_equipes ?? 0} equipes
                                     </p>
                                 </div>
                                 <div className="flex flex-col items-end">
-                                    <span className={`text-xl font-semibold tabular-nums leading-none ${reg.last_result >= data.meta ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                        {reg.last_result.toFixed(1)}%
+                                    <span className={`text-xl font-semibold tabular-nums leading-none ${(reg?.last_result ?? 0) >= (data?.meta ?? 0) ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                        {(reg?.last_result ?? 0).toFixed(1)}%
                                     </span>
                                     <span className="text-[9px] text-text-muted font-medium uppercase tracking-tighter">(último)</span>
                                 </div>
@@ -336,7 +336,7 @@ export default function AprDigitalPage() {
                                                         return (
                                                             <div className="bg-background border border-border p-2 rounded-sm shadow-xl">
                                                                 <p className="text-[9px] font-semibold text-text-muted uppercase mb-1">{payload[0].payload.name}</p>
-                                                                <p className="text-[12px] font-semibold text-primary">{payload[0].value}%</p>
+                                                                <p className="text-[12px] font-semibold text-primary">{payload[0]?.value ?? 0}%</p>
                                                             </div>
                                                         );
                                                     }
@@ -366,12 +366,12 @@ export default function AprDigitalPage() {
                                         <div key={tIdx} className="flex flex-col gap-0.5">
                                             <div className="flex justify-between items-center px-0.5">
                                                 <span className="text-[11px] font-semibold text-text-heading/80 uppercase tracking-tight truncate pr-2">{team.equipe}</span>
-                                                <span className={`text-[13px] font-semibold tabular-nums ${isWin ? 'text-blue-700' : 'text-rose-500'}`}>{team.efetividade.toFixed(0)}%</span>
+                                                <span className={`text-[13px] font-semibold tabular-nums ${isWin ? 'text-blue-700' : 'text-rose-500'}`}>{(team?.efetividade ?? 0).toFixed(0)}%</span>
                                             </div>
                                             <div className="w-full h-1.5 bg-slate-200/50 rounded-full overflow-hidden">
                                                 <div
                                                     className={`h-full rounded-full transition-all duration-1000 ${isWin ? 'bg-blue-800' : 'bg-rose-500'}`}
-                                                    style={{ width: `${team.efetividade}%` }}
+                                                    style={{ width: `${team?.efetividade ?? 0}%` }}
                                                 />
                                             </div>
                                         </div>

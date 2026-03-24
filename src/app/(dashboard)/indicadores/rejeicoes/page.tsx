@@ -96,9 +96,9 @@ export default function RejeicoesPage() {
     if (error) return <PageError error={`Falha no rastreio de qualidade: ${error}`} onRetry={() => loadData()} />
     if (!data) return null
 
-    const stats = data.stats;
-    const historyData = data.history.map(h => ({ name: h.MesAno, value: h.Qtd }));
-    const paretoData = data.pareto.map(p => ({ name: p.Motivo, value: p.Qtd, pct: p.Pct }));
+    const stats = data?.stats;
+    const historyData = (data?.history ?? []).map(h => ({ name: h.MesAno, value: h.Qtd }));
+    const paretoData = (data?.pareto ?? []).map(p => ({ name: p.Motivo, value: p.Qtd, pct: p.Pct }));
 
     return (
         <div className="p-4 space-y-4 animate-in fade-in duration-700">
@@ -106,10 +106,10 @@ export default function RejeicoesPage() {
             <PageHeader
                 icon="analytics"
                 title="Inteligência de Qualidade e Insights"
-                insights={data.insights}
-                fallbackText={`Análise de rejeições consolidada para o período de ${data.period_label}.`}
-                sourceFile={data.source_file}
-                lastUpdate={data.last_update}
+                insights={data?.insights ?? []}
+                fallbackText={`Análise de rejeições consolidada para o período de ${data?.period_label ?? "..."}.`}
+                sourceFile={data?.source_file ?? "API"}
+                lastUpdate={data?.last_update ?? new Date().toISOString()}
                 onRefresh={() => loadData(true)}
                 loading={loading}
                 showPeriodSelector={true}
@@ -119,30 +119,30 @@ export default function RejeicoesPage() {
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
                     title="Volume Total"
-                    value={stats.total.toString()}
+                    value={(stats?.total ?? 0).toString()}
                     target="Notas Reprovadas"
                     icon="receipt_long"
                 />
                 <KpiCard
                     title="Média Diária"
-                    value={stats.media_dia.toFixed(1)}
-                    variation={`${((stats.media_dia - stats.media_prev) / (stats.media_prev || 1) * 100).toFixed(1)}%`}
+                    value={(stats?.media_dia ?? 0).toFixed(1)}
+                    variation={`${(( (stats?.media_dia ?? 0) - (stats?.media_prev ?? 0) ) / (stats?.media_prev || 1) * 100).toFixed(1)}%`}
                     target="vs Anterior"
                     icon="monitoring"
                 />
                 <KpiCard
                     title="Aderência Auditoria"
-                    value={`${stats.aderencia_pct.toFixed(1)}%`}
-                    target={`${stats.status_resumo.auditadas} Audit`}
+                    value={`${(stats?.aderencia_pct ?? 0).toFixed(1)}%`}
+                    target={`${stats?.status_resumo?.auditadas ?? 0} Audit`}
                     icon="fact_check"
-                    colorValue={stats.aderencia_pct >= 90 ? 'success' : 'warning'}
+                    colorValue={(stats?.aderencia_pct ?? 0) >= 90 ? 'success' : 'warning'}
                 />
                 <KpiCard
                     title="Pendências"
-                    value={stats.status_resumo.pendentes.toString()}
+                    value={(stats?.status_resumo?.pendentes ?? 0).toString()}
                     target="Em Análise"
                     icon="history"
-                    colorValue={stats.status_resumo.pendentes > 5 ? 'danger' : 'warning'}
+                    colorValue={(stats?.status_resumo?.pendentes ?? 0) > 5 ? 'danger' : 'warning'}
                 />
             </div>
 
@@ -169,21 +169,21 @@ export default function RejeicoesPage() {
                     <div className="p-4 border-b border-border flex items-center justify-between bg-rose-500/5">
                         <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined text-rose-500">group</span>
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Top 3 Equipes Ofensoras</h3>
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Top Equipes Ofensoras</h3>
                         </div>
                     </div>
                     <div className="p-2 flex flex-col gap-1">
-                        {data.top_equipes.length > 0 ? data.top_equipes.slice(0, 5).map((t, idx) => (
+                        {(data?.top_equipes ?? []).length > 0 ? (data?.top_equipes ?? []).slice(0, 10).map((t, idx) => (
                             <div key={idx} className="flex justify-between items-center p-3 bg-surface/50 border border-transparent hover:border-rose-500/20 transition-all group rounded-sm min-h-[55px]">
                                 <div className="flex items-center gap-3">
                                     <span className="text-[11px] font-semibold text-rose-500/30 w-5">#{idx + 1}</span>
                                     <div className="flex flex-col">
-                                        <span className="font-medium text-[13px] text-text-heading uppercase truncate">{t.Equipe}</span>
+                                        <span className="font-medium text-[13px] text-text-heading uppercase truncate">{t?.Equipe ?? "N/D"}</span>
                                         <span className="text-[9px] text-text-muted font-medium uppercase">Equipe de Turma</span>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-lg font-semibold text-rose-500 tabular-nums">{t.Qtd}</span>
+                                    <span className="text-lg font-semibold text-rose-500 tabular-nums">{t?.Qtd ?? 0}</span>
                                     <span className="text-[9px] font-semibold text-text-muted ml-1 uppercase">Reprovações</span>
                                 </div>
                             </div>
@@ -196,21 +196,21 @@ export default function RejeicoesPage() {
                     <div className="p-4 border-b border-border flex items-center justify-between bg-amber-500/5">
                         <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined text-amber-500">person</span>
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Top 3 Operadores Ofensores</h3>
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Top Operadores Ofensores</h3>
                         </div>
                     </div>
                     <div className="p-2 flex flex-col gap-1">
-                        {data.top_eletricistas.length > 0 ? data.top_eletricistas.slice(0, 5).map((t, idx) => (
+                        {(data?.top_eletricistas ?? []).length > 0 ? (data?.top_eletricistas ?? []).slice(0, 10).map((t, idx) => (
                             <div key={idx} className="flex justify-between items-center p-3 bg-surface/50 border border-transparent hover:border-amber-500/20 transition-all group rounded-sm min-h-[55px]">
                                 <div className="flex items-center gap-3">
                                     <span className="text-[11px] font-semibold text-amber-500/30 w-5">#{idx + 1}</span>
                                     <div className="flex flex-col">
-                                        <span className="font-medium text-[13px] text-text-heading uppercase truncate">{t.Equipe}</span>
+                                        <span className="font-medium text-[13px] text-text-heading uppercase truncate">{t?.Equipe ?? "N/D"}</span>
                                         <span className="text-[9px] text-text-muted font-medium uppercase">Eletricista Responsável</span>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-lg font-semibold text-amber-500 tabular-nums">{t.Qtd}</span>
+                                    <span className="text-lg font-semibold text-amber-500 tabular-nums">{t?.Qtd ?? 0}</span>
                                     <span className="text-[9px] font-semibold text-text-muted ml-1 uppercase">Reprovações</span>
                                 </div>
                             </div>
@@ -248,17 +248,17 @@ export default function RejeicoesPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border text-[12px]">
-                                {data.backoffice_data.length > 0 ? (
-                                    data.backoffice_data
-                                        .filter(b => isNaN(Number(b.Backoffice))) // Remove IDs numéricos (1.0, 2.0, etc)
+                                {(data?.backoffice_data ?? []).length > 0 ? (
+                                    (data?.backoffice_data ?? [])
+                                        .filter(b => isNaN(Number(b?.Backoffice))) 
                                         .map((b, idx) => (
                                             <tr key={idx} className="hover:bg-surface/50 transition-colors group">
                                                 <td className="p-3 pl-4 min-w-[200px]">
-                                                    <p className="font-medium text-[13px] text-text-heading uppercase group-hover:text-primary transition-colors">{b.Backoffice}</p>
+                                                    <p className="font-medium text-[13px] text-text-heading uppercase group-hover:text-primary transition-colors">{b?.Backoffice ?? "N/D"}</p>
                                                 </td>
-                                                <td className="p-3 text-center text-emerald-500 font-medium tabular-nums text-[13px]">{b.Procedente}</td>
-                                                <td className="p-3 text-center text-rose-500 font-medium tabular-nums text-[13px]">{b.Improcedente}</td>
-                                                <td className="p-3 text-center text-amber-500 font-semibold tabular-nums text-[13px] bg-amber-500/5">{b["Em Análise"]}</td>
+                                                <td className="p-3 text-center text-emerald-500 font-medium tabular-nums text-[13px]">{b?.Procedente ?? 0}</td>
+                                                <td className="p-3 text-center text-rose-500 font-medium tabular-nums text-[13px]">{b?.Improcedente ?? 0}</td>
+                                                <td className="p-3 text-center text-amber-500 font-semibold tabular-nums text-[13px] bg-amber-500/5">{b?.["Em Análise"] ?? 0}</td>
                                             </tr>
                                         ))
                                 ) : (
@@ -326,20 +326,20 @@ export default function RejeicoesPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-[11px]">
-                            {filteredRecords.length > 0 ? (
-                                filteredRecords.map((r, idx) => (
+                            {(filteredRecords ?? []).length > 0 ? (
+                                (filteredRecords ?? []).map((r, idx) => (
                                     <tr key={idx} className="hover:bg-surface/50 transition-colors">
-                                        <td className="p-3 pl-4 font-medium tabular-nums text-text-muted whitespace-nowrap">{r.data}</td>
-                                        <td className="p-3 text-[10px] font-semibold text-text-muted uppercase whitespace-nowrap">{r.regional}</td>
+                                        <td className="p-3 pl-4 font-medium tabular-nums text-text-muted whitespace-nowrap">{r?.data ?? "N/D"}</td>
+                                        <td className="p-3 text-[10px] font-semibold text-text-muted uppercase whitespace-nowrap">{r?.regional ?? "N/D"}</td>
                                         <td className="p-3 whitespace-nowrap">
-                                            <span className={`px-2 py-0.5 rounded-sm font-semibold uppercase text-[9px] ${r.status === 'Procedente' ? 'bg-emerald-500/10 text-emerald-600' : r.status === 'Improcedente' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-600'}`}>
-                                                {r.status}
+                                            <span className={`px-2 py-0.5 rounded-sm font-semibold uppercase text-[9px] ${r?.status === 'Procedente' ? 'bg-emerald-500/10 text-emerald-600' : r?.status === 'Improcedente' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-600'}`}>
+                                                {r?.status ?? "Pendente"}
                                             </span>
                                         </td>
-                                        <td className="p-3 font-semibold text-text-heading uppercase whitespace-nowrap">{r.equipe}</td>
-                                        <td className="p-3 tabular-nums text-text-muted font-medium whitespace-nowrap">{r.nota}</td>
-                                        <td className="p-3 text-text-heading font-medium leading-tight max-w-[280px]">{r.motivo}</td>
-                                        <td className="p-3 text-text-muted italic max-w-[320px]">{r.observacao}</td>
+                                        <td className="p-3 font-semibold text-text-heading uppercase whitespace-nowrap">{r?.equipe ?? "N/D"}</td>
+                                        <td className="p-3 tabular-nums text-text-muted font-medium whitespace-nowrap">{r?.nota ?? "N/D"}</td>
+                                        <td className="p-3 text-text-heading font-medium leading-tight max-w-[280px]">{r?.motivo ?? "N/D"}</td>
+                                        <td className="p-3 text-text-muted italic max-w-[320px]">{r?.observacao ?? ""}</td>
                                     </tr>
                                 ))
                             ) : (

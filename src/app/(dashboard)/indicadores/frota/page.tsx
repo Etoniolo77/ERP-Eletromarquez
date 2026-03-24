@@ -97,7 +97,7 @@ export default function FrotaPage() {
         setLoading(true)
         setError(null)
         try {
-            if (forceSync) await triggerSync("frota")
+            // if (forceSync) await triggerSync("frota")
             const signal = abortRef.current.signal
             const [dashRes, regRes, setRes] = await Promise.all([
                 api.get(`/frota/dashboard`, {
@@ -226,26 +226,26 @@ export default function FrotaPage() {
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
                     title="Custo Acumulado"
-                    value={formatCurrency(stats.total_custo)}
-                    variation={`${stats.trend_custo}%`}
+                    value={formatCurrency(stats?.total_custo ?? 0)}
+                    variation={`${stats?.trend_custo ?? 0}%`}
                     icon="payments"
                 />
                 <KpiCard
                     title="Ticket Médio OS"
-                    value={formatCurrency(stats.ticket_medio)}
-                    variation={`${stats.trend_ticket}%`}
+                    value={formatCurrency(stats?.ticket_medio ?? 0)}
+                    variation={`${stats?.trend_ticket ?? 0}%`}
                     icon="trending_up"
                 />
                 <KpiCard
                     title="Volume Serviços"
-                    value={`${stats.qtd_servicos} OS`}
-                    variation={`${stats.trend_servicos}%`}
+                    value={`${stats?.qtd_servicos ?? 0} OS`}
+                    variation={`${stats?.trend_servicos ?? 0}%`}
                     icon="engineering"
                 />
                 <KpiCard
                     title="Frota Gerenciada"
-                    value={stats.total_frota}
-                    variation={`${stats.trend_frota}%`}
+                    value={stats?.total_frota ?? 0}
+                    variation={`${stats?.trend_frota ?? 0}%`}
                     icon="directions_car"
                 />
             </div>
@@ -302,7 +302,7 @@ export default function FrotaPage() {
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Matriz de Alocação de Custos</h3>
                         <p className="text-[10px] text-text-muted uppercase font-medium mt-1 tracking-widest truncate">Visão detalhada de desembolso por centro de custo e região</p>
                     </div>
-                    <span className="px-2 py-1 bg-primary text-white text-[9px] font-semibold uppercase rounded-sm shadow-md">Benchmark: {formatCurrency(stats.ticket_medio)} / Veículo</span>
+                    <span className="px-2 py-1 bg-primary text-white text-[9px] font-semibold uppercase rounded-sm shadow-md">Benchmark: {formatCurrency(stats?.ticket_medio ?? 0)} / Veículo</span>
                 </div>
 
                 <div className="overflow-x-auto custom-scrollbar">
@@ -311,7 +311,7 @@ export default function FrotaPage() {
                             <tr className="bg-surface/20 border-b border-border">
                                 <th className="p-4 text-[10px] font-semibold text-text-muted uppercase sticky left-0 z-20 bg-surface border-r border-border min-w-[200px]">Unidade \ Setor</th>
                                 {(() => {
-                                    const sectors = [...new Set(data.matrix.map(m => m.setor))].sort();
+                                    const sectors = [...new Set((data?.matrix ?? []).map(m => m.setor))].sort();
                                     return (
                                         <>
                                             {sectors.map(s => (
@@ -324,14 +324,14 @@ export default function FrotaPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-[12px]">
-                            {data.matrix && data.matrix.length > 0 ? (() => {
-                                const sectors = [...new Set(data.matrix.map(m => m.setor))].sort();
-                                const regionals = [...new Set(data.matrix.map(m => m.regional))].sort();
+                            {(data?.matrix ?? []).length > 0 ? (() => {
+                                const sectors = [...new Set((data?.matrix ?? []).map(m => m?.setor ?? "N/D"))].sort();
+                                const regionals = [...new Set((data?.matrix ?? []).map(m => m?.regional ?? "N/D"))].sort();
 
                                 return regionals.map(reg => {
-                                    const rowItems = data.matrix.filter(m => m.regional === reg);
-                                    const rowTotal = rowItems.reduce((acc, curr) => acc + curr.total, 0);
-                                    const rowVeic = rowItems.reduce((acc, curr) => acc + curr.veiculos, 0);
+                                    const rowItems = (data?.matrix ?? []).filter(m => m?.regional === reg);
+                                    const rowTotal = rowItems.reduce((acc, curr) => acc + (curr?.total ?? 0), 0);
+                                    const rowVeic = rowItems.reduce((acc, curr) => acc + (curr?.veiculos ?? 0), 0);
                                     const rowMedio = rowVeic > 0 ? rowTotal / rowVeic : 0;
 
                                     return (
@@ -340,16 +340,16 @@ export default function FrotaPage() {
                                                 {reg}
                                             </td>
                                             {sectors.map(set => {
-                                                const cell = data.matrix.find(m => m.regional === reg && m.setor === set);
+                                                const cell = (data?.matrix ?? []).find(m => m?.regional === reg && m?.setor === set);
                                                 const total = cell?.total || 0;
                                                 const medio = cell?.medio || 0;
-                                                const isHigh = medio > stats.ticket_medio * 1.5;
+                                                const isHigh = medio > (stats?.ticket_medio ?? 0) * 1.5;
                                                 return (
                                                     <td key={set} className="p-4 text-center border-r border-border/5">
                                                         {total > 0 ? (
                                                             <div>
                                                                 <p className={`text-xs font-semibold ${isHigh ? 'text-rose-500' : 'text-text-heading'}`}>{formatCurrency(total)}</p>
-                                                                <p className="text-[10px] text-text-muted font-medium uppercase mt-0.5">{cell?.veiculos} Ativos • {formatCurrency(medio)}</p>
+                                                                <p className="text-[10px] text-text-muted font-medium uppercase mt-0.5">{(cell?.veiculos ?? 0)} Ativos • {formatCurrency(medio)}</p>
                                                             </div>
                                                         ) : <span className="text-border">—</span>}
                                                     </td>
@@ -411,16 +411,16 @@ export default function FrotaPage() {
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
-                                    data={data.manutencoes}
+                                    data={data?.manutencoes ?? []}
                                     cx="50%" cy="45%" innerRadius={70} outerRadius={100}
                                     paddingAngle={4} dataKey="value" stroke="none"
                                     labelLine={false}
                                     label={renderPercentageLabel}
                                 >
-                                    {data.manutencoes.map((entry, index) => (
+                                    {(data?.manutencoes ?? []).map((entry, index) => (
                                         <Cell
                                             key={`cell-${index}`}
-                                            fill={entry.name.toUpperCase().includes('PREVENTIVA') ? '#10b981' : (entry.name.toUpperCase().includes('CORRETIVA') ? '#f43f5e' : COLORS[index % COLORS.length])}
+                                            fill={(entry?.name ?? "").toUpperCase().includes('PREVENTIVA') ? '#10b981' : ((entry?.name ?? "").toUpperCase().includes('CORRETIVA') ? '#f43f5e' : COLORS[index % COLORS.length])}
                                         />
                                     ))}
                                 </Pie>
@@ -444,7 +444,7 @@ export default function FrotaPage() {
                     </div>
                     <div className="flex-1 w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={data.fornecedores.slice(0, 8)} layout="vertical">
+                            <BarChart data={(data?.fornecedores ?? []).slice(0, 8)} layout="vertical">
                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(148, 163, 184, 0.05)" />
                                 <XAxis type="number" hide />
                                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={200} tick={{ fontSize: 9, fill: 'var(--text-muted)', fontWeight: 500 }} />
@@ -453,7 +453,7 @@ export default function FrotaPage() {
                                     contentStyle={{ borderRadius: '2px', border: '1px solid var(--border)', backgroundColor: 'var(--surface)', fontSize: '9px', textTransform: 'uppercase', fontWeight: 600 }}
                                 />
                                 <Bar dataKey="value" radius={[0, 2, 2, 0]} barSize={16}>
-                                    {data.fornecedores.slice(0, 8).map((_, index) => (
+                                    {(data?.fornecedores ?? []).slice(0, 8).map((_, index) => (
                                         <Cell key={`cell-${index}`} fill={index < 3 ? '#f43f5e' : '#1152d4'} />
                                     ))}
                                 </Bar>
@@ -479,11 +479,11 @@ export default function FrotaPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border text-[12px]">
-                                {data.top_servicos && data.top_servicos.length > 0 ? (
-                                    data.top_servicos.slice(0, 10).map((s, i) => (
+                                {data?.top_servicos && (data?.top_servicos ?? []).length > 0 ? (
+                                    (data?.top_servicos ?? []).slice(0, 10).map((s, i) => (
                                         <tr key={i} className="hover:bg-surface/50 transition-colors">
-                                            <td className="p-3 text-text-heading uppercase truncate min-w-[250px] font-semibold">{s.name}</td>
-                                            <td className="p-3 text-right text-rose-500 font-semibold tabular-nums">{formatCurrency(s.value)}</td>
+                                            <td className="p-3 text-text-heading uppercase truncate min-w-[250px] font-semibold">{s?.name ?? "N/D"}</td>
+                                            <td className="p-3 text-right text-rose-500 font-semibold tabular-nums">{formatCurrency(s?.value ?? 0)}</td>
                                         </tr>
                                     ))
                                 ) : (
@@ -518,8 +518,8 @@ export default function FrotaPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {data.top_offenders && data.top_offenders.length > 0 ? (
-                                    data.top_offenders.slice(0, 15).map((v, i) => (
+                                {(data?.top_offenders ?? []).length > 0 ? (
+                                    (data?.top_offenders ?? []).slice(0, 15).map((v, i) => (
                                         <tr key={v.id} className="hover:bg-surface/50 transition-colors">
                                             <td className="p-3 text-rose-500 font-semibold tabular-nums">{v.id}</td>
                                             <td className="p-3 text-text-muted uppercase tracking-tight">{v.modelo}</td>
@@ -556,12 +556,12 @@ export default function FrotaPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {data.custo_medio_tipo && data.custo_medio_tipo.length > 0 ? (
-                                    data.custo_medio_tipo.map((v, i) => (
+                                {(data?.custo_medio_tipo ?? []).length > 0 ? (
+                                    (data?.custo_medio_tipo ?? []).map((v, i) => (
                                         <tr key={i} className="hover:bg-surface/50 transition-colors">
                                             <td className="p-4 text-text-heading uppercase tracking-tight">{v.name}</td>
-                                            <td className="p-4 text-right text-text-muted tabular-nums">{formatCurrency(v.custo * (v.veiculos || 1))}</td>
-                                            <td className="p-4 text-right pr-4 text-emerald-500 font-semibold tabular-nums">{formatCurrency(v.custo)}</td>
+                                            <td className="p-4 text-right text-text-muted tabular-nums">{formatCurrency((v?.custo ?? 0) * (v?.veiculos || 1))}</td>
+                                            <td className="p-4 text-right pr-4 text-emerald-500 font-semibold tabular-nums">{formatCurrency(v?.custo ?? 0)}</td>
                                         </tr>
                                     ))
                                 ) : (

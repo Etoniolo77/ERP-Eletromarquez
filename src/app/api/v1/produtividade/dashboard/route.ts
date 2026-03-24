@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange, getPrevDateRange } from "@/lib/dateRange"
-import { safeFetch } from "@/lib/apiFetcher"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,16 +10,48 @@ export async function GET(req: NextRequest) {
     const { startDate, endDate } = getDateRange(periodo)
     const { startDate: prevStart, endDate: prevEnd } = getPrevDateRange(periodo)
 
-    const [data, prev, configData] = await Promise.all([
-      safeFetch<any[]>(`/proxy/produtividade_records?data.gte=${startDate}&data.lte=${endDate}`, []),
-      safeFetch<any[]>(`/proxy/produtividade_records?data.gte=${prevStart}&data.lte=${prevEnd}&select=produtividade_pct`, []),
-      safeFetch<any[]>(`/proxy/system_configs?key=meta_produtividade`, []),
+    const supabase = await createClient()
+
+    const [
+      { data: initialData, error: dataError },
+      { data: prevData, error: prevError },
+      { data: configData, error: configError }
+    ] = await Promise.all([
+      supabase.from("produtividade").select("*").gte("data", startDate).lte("data", endDate),
+      supabase.from("produtividade").select("produtividade_pct").gte("data", prevStart).lte("data", prevEnd),
+      supabase.from("system_configs").select("*").eq("key", "meta_produtividade")
     ])
+
+    if (dataError) throw new Error(dataError.message)
+    if (prevError) throw new Error(prevError.message)
+    if (configError) throw new Error(configError.message)
+
+    let records = initialData || []
+
+    // FALLBACK: If current period has no data, fetch latest month available
+    if (records.length === 0) {
+      console.log(`[Produtividade API] No data for ${startDate} to ${endDate}. Falling back.`)
+      const { data: latestData, error: latestError } = await supabase
+        .from("produtividade")
+        .select("*")
+        .order("data", { ascending: false })
+        .limit(500)
+      
+      if (latestError) throw new Error(latestError.message)
+      
+      if (latestData && latestData.length > 0) {
+        const latestDate = latestData[0].data
+        const latestMonth = latestDate.substring(0, 7)
+        records = latestData.filter(r => r.data && r.data.startsWith(latestMonth))
+      }
+    }
+
+    const prev = prevData || []
 
     const configRow = configData.length > 0 ? configData[0] : null
     const meta_prod = configRow?.value ? parseFloat(configRow.value) : 85
 
-    if (data.length === 0) {
+    if (records.length === 0) {
       return NextResponse.json({
         meta_prod,
         periodo_ref: `${startDate} a ${endDate}`,
@@ -41,34 +73,34 @@ export async function GET(req: NextRequest) {
 
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
 
-    const prods = data.map((r: any) => r.produtividade_pct || 0)
+    const prods = records.map((r: any) => r.produtividade_pct || 0)
     const media_prod = Math.round(avg(prods) * 10) / 10
     const prevMedia = avg(prev.map((r: any) => r.produtividade_pct || 0))
     const trend_prod = prevMedia > 0 ? Math.round(((media_prod - prevMedia) / prevMedia) * 1000) / 10 : 0
-
-    const total_ociosidade_hrs = Math.round(data.reduce((a: number, r: any) => a + (r.ociosidade_min || 0), 0) / 60 * 10) / 10
-    const total_desvios_hrs = Math.round(data.reduce((a: number, r: any) => a + (r.desvios_min || 0), 0) / 60 * 10) / 10
-    const total_notas = data.reduce((a: number, r: any) => a + (r.notas_executadas || 0), 0)
-    const total_rejeicoes = data.reduce((a: number, r: any) => a + (r.notas_rejeitadas || 0), 0)
-
-    const equipes = [...new Set(data.map((r: any) => r.equipe).filter(Boolean))]
+ 
+    const total_ociosidade_hrs = Math.round(records.reduce((a: number, r: any) => a + (r.ociosidade_min || 0), 0) / 60 * 10) / 10
+    const total_desvios_hrs = Math.round(records.reduce((a: number, r: any) => a + (r.desvios_min || 0), 0) / 60 * 10) / 10
+    const total_notas = records.reduce((a: number, r: any) => a + (r.notas_executadas || 0), 0)
+    const total_rejeicoes = records.reduce((a: number, r: any) => a + (r.notas_rejeitadas || 0), 0)
+ 
+    const equipes = [...new Set(records.map((r: any) => r.equipe).filter(Boolean))]
     const total_equipes = equipes.length
     const acima_meta = equipes.filter(eq => {
-      const eqRows = data.filter((r: any) => r.equipe === eq)
+      const eqRows = records.filter((r: any) => r.equipe === eq)
       return avg(eqRows.map((r: any) => r.produtividade_pct || 0)) >= meta_prod
     }).length
     const atingimento_meta = total_equipes > 0 ? Math.round((acima_meta / total_equipes) * 1000) / 10 : 0
-
+ 
     // Chart: group by equipe
     const chartLabels = equipes.slice(0, 20)
     const chartData = chartLabels.map(eq => {
-      const eqRows = data.filter((r: any) => r.equipe === eq)
+      const eqRows = records.filter((r: any) => r.equipe === eq)
       return Math.round(avg(eqRows.map((r: any) => r.produtividade_pct || 0)) * 10) / 10
     })
-
+ 
     // Top piores / melhores
     const equipeStats = equipes.map(eq => {
-      const eqRows = data.filter((r: any) => r.equipe === eq)
+      const eqRows = records.filter((r: any) => r.equipe === eq)
       const csd = eqRows[0]?.csd || ""
       return {
         equipe: eq,
@@ -80,15 +112,15 @@ export async function GET(req: NextRequest) {
         interrompidas: eqRows.reduce((a: number, r: any) => a + (r.notas_interrompidas || 0), 0),
       }
     })
-
+ 
     const sorted = [...equipeStats].sort((a, b) => a.produtividade - b.produtividade)
     const top_piores = sorted.slice(0, 10)
     const top_melhores = [...sorted].reverse().slice(0, 10)
-
+ 
     // Breakdown by CSD
-    const csds = [...new Set(data.map((r: any) => r.csd).filter(Boolean))]
+    const csds = [...new Set(records.map((r: any) => r.csd).filter(Boolean))]
     const breakdown_csd = csds.map(csd => {
-      const csdRows = data.filter((r: any) => r.csd === csd)
+      const csdRows = records.filter((r: any) => r.csd === csd)
       const csdEquipes = [...new Set(csdRows.map((r: any) => r.equipe).filter(Boolean))]
       const csdMedia = Math.round(avg(csdRows.map((r: any) => r.produtividade_pct || 0)) * 10) / 10
       const csdAcima = csdEquipes.filter(eq => {
@@ -137,7 +169,8 @@ export async function GET(req: NextRequest) {
         total_notas,
         total_rejeicoes,
         total_equipes,
-        atingimento_meta
+        atingimento_meta,
+        num_dias: new Set(records.map((r: any) => r.data ? r.data.split("T")[0] : null).filter(Boolean)).size
       },
       chart: { labels: chartLabels, data: chartData },
       top_desvios: [],

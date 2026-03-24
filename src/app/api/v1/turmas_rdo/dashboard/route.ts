@@ -1,6 +1,6 @@
 import { getDateRange, getPrevDateRange } from "@/lib/dateRange"
 import { NextRequest, NextResponse } from "next/server"
-import { safeFetch } from "@/lib/apiFetcher"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,17 +11,59 @@ export async function GET(req: NextRequest) {
     const { startDate, endDate } = getDateRange(periodo)
     const { startDate: prevStart, endDate: prevEnd } = getPrevDateRange(periodo)
     
-    // Convert to safeFetch calls
-    const [data, prev] = await Promise.all([
-      safeFetch<any[]>(`/proxy/apr_records?sector=${encodeURIComponent(sector)}&data.gte=${startDate}&data.lte=${endDate}`, []),
-      safeFetch<any[]>(`/proxy/apr_records?sector=${encodeURIComponent(sector)}&data.gte=${prevStart}&data.lte=${prevEnd}&select=efetividade`, []),
-    ])
+    const supabase = await createClient()
+    
+    // Fetch current period
+    let { data, error } = await supabase
+      .from("apr_records")
+      .select("*")
+      .eq("sector", sector)
+      .gte("data", startDate)
+      .lte("data", endDate)
+
+    if (error) throw new Error(error.message)
+
+    let records = data || []
+
+    // FALLBACK: If current period has no data, fetch latest month available for this sector
+    if (records.length === 0) {
+      console.log(`[RDO Dashboard] No data for ${startDate} to ${endDate}. Falling back.`)
+      const { data: latestData, error: latestError } = await supabase
+        .from("apr_records")
+        .select("*")
+        .eq("sector", sector)
+        .order("data", { ascending: false })
+        .limit(200)
+      
+      if (latestError) throw new Error(latestError.message)
+      
+      if (latestData && latestData.length > 0) {
+        const latestDate = latestData[0].data
+        const latestMonth = latestDate.substring(0, 7)
+        data = latestData.filter(r => r.data && r.data.startsWith(latestMonth))
+      }
+    }
+
+    // Fetch previous period (for trend)
+    const { data: prevData, error: prevError } = await supabase
+      .from("apr_records")
+      .select("efetividade")
+      .eq("sector", sector)
+      .gte("data", prevStart)
+      .lte("data", prevEnd)
+
+    if (prevError) throw new Error(prevError.message)
+
+    const prev = prevData || []
 
     const meta = 95
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
     const round1 = (n: number) => Math.round(n * 10) / 10
 
-    if (data.length === 0) {
+    // Ensure records is the final data source
+    const finalRecords = data || []
+
+    if (finalRecords.length === 0) {
       return NextResponse.json({
         sector,
         period_label: `${startDate} a ${endDate}`,
@@ -37,21 +79,21 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const efets = data.map((r: any) => r.efetividade || 0)
-    const aderencia_global = round1(avg(efets))
-    const prevEfet = avg(prev.map((r: any) => r.efetividade || 0))
+    const efets = finalRecords.map((r: any) => r.efetividade || 0)
+    const aderencia_global = round1(avg(efets) * 100)
+    const prevEfet = avg(prev.map((r: any) => r.efetividade || 0)) * 100
     const aderencia_var = prevEfet > 0 ? round1(aderencia_global - prevEfet) : 0
 
-    const equipes = [...new Set(data.map((r: any) => r.equipe).filter(Boolean))]
+    const equipes = [...new Set(finalRecords.map((r: any) => r.equipe).filter(Boolean))]
     const total_equipes = equipes.length
     const equipes_fora_meta = equipes.filter(eq => {
-      const eqRows = data.filter((r: any) => r.equipe === eq)
+      const eqRows = finalRecords.filter((r: any) => r.equipe === eq)
       return avg(eqRows.map((r: any) => r.efetividade || 0)) < meta
     }).length
 
     // History: group by date
     const histMap: Record<string, number[]> = {}
-    data.forEach((r: any) => {
+    finalRecords.forEach((r: any) => {
       const d = r.data ? r.data.split("T")[0] : "N/D"
       if (!histMap[d]) histMap[d] = []
       histMap[d].push(r.efetividade || 0)
@@ -64,7 +106,7 @@ export async function GET(req: NextRequest) {
 
     // Equipe stats
     const equipeStats = equipes.map(eq => {
-      const eqRows = data.filter((r: any) => r.equipe === eq)
+      const eqRows = finalRecords.filter((r: any) => r.equipe === eq)
       return {
         equipe: eq,
         regional: eqRows[0]?.regional || "",
@@ -77,9 +119,9 @@ export async function GET(req: NextRequest) {
     const top_piores = [...equipeStats].reverse().slice(0, 5)
 
     // Regional breakdown
-    const regionais = [...new Set(data.map((r: any) => r.regional).filter(Boolean))]
+    const regionais = [...new Set(finalRecords.map((r: any) => r.regional).filter(Boolean))]
     const regional_breakdown = regionais.map(reg => {
-      const regRows = data.filter((r: any) => r.regional === reg)
+      const regRows = finalRecords.filter((r: any) => r.regional === reg)
       const regEquipes = [...new Set(regRows.map((r: any) => r.equipe))]
       return {
         regional: reg,

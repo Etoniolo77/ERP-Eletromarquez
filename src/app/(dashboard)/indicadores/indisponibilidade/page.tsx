@@ -71,8 +71,8 @@ export default function IndisponibilidadePage() {
     }
 
     const getSortedMatrix = () => {
-        if (!data || !data.matrix) return [];
-        let sorted = [...data.matrix];
+        if (!data || !(data.matrix ?? []).length) return [];
+        let sorted = [...(data.matrix ?? [])];
         if (sortConfig) {
             sorted.sort((a, b) => {
                 let valA = 0;
@@ -80,14 +80,14 @@ export default function IndisponibilidadePage() {
 
                 if (sortConfig.key === 'Tipo') {
                     return sortConfig.direction === 'asc'
-                        ? a.Tipo.localeCompare(b.Tipo)
-                        : b.Tipo.localeCompare(a.Tipo);
+                        ? (a.Tipo ?? "").localeCompare(b.Tipo ?? "")
+                        : (b.Tipo ?? "").localeCompare(a.Tipo ?? "");
                 } else if (sortConfig.key === 'Total') {
-                    valA = a._total_impacto || 0;
-                    valB = b._total_impacto || 0;
+                    valA = a._total_impacto ?? 0;
+                    valB = b._total_impacto ?? 0;
                 } else {
-                    valA = (a[sortConfig.key]?.tratado || 0) + (a[sortConfig.key]?.pendente || 0);
-                    valB = (b[sortConfig.key]?.tratado || 0) + (b[sortConfig.key]?.pendente || 0);
+                    valA = (a[sortConfig.key]?.tratado ?? 0) + (a[sortConfig.key]?.pendente ?? 0);
+                    valB = (b[sortConfig.key]?.tratado ?? 0) + (b[sortConfig.key]?.pendente ?? 0);
                 }
 
                 return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
@@ -142,7 +142,13 @@ export default function IndisponibilidadePage() {
     )
     if (!data) return null
 
-    const stats = data.stats;
+    const stats = data?.stats || {
+        total_valor: 0,
+        pendente_valor: 0,
+        total_itens: 0,
+        pendente_itens: 0,
+        aderencia: 0
+    };
 
     return (
         <div className="p-4 space-y-4 animate-in fade-in duration-700">
@@ -150,8 +156,8 @@ export default function IndisponibilidadePage() {
             <PageHeader
                 icon="analytics"
                 title="Inteligência Operacional e Insights"
-                insights={data.insights}
-                fallbackText={`Monitoramento de indisponibilidade consolidado para o arquivo ${data.source_file}.`}
+                insights={data.insights ?? []}
+                fallbackText={`Monitoramento de indisponibilidade consolidado para o arquivo ${data.source_file ?? "N/D"}.`}
                 sourceFile={data.source_file}
                 lastUpdate={data.last_update}
                 onRefresh={() => loadData(true)}
@@ -159,13 +165,13 @@ export default function IndisponibilidadePage() {
                 showPeriodSelector={true}
             >
                 {/* Month Selector */}
-                {data.available_months && data.available_months.length > 0 && (
+                {(data.available_months ?? []).length > 0 && (
                     <select
                         value={selectedMonth}
                         onChange={(e) => setSelectedMonth(e.target.value)}
                         className="bg-surface border border-border text-text-heading text-[11px] font-semibold uppercase tracking-tight rounded-sm px-2.5 py-1.5 focus:outline-none focus:border-primary/60 cursor-pointer h-[32px] shadow-sm"
                     >
-                        {data.available_months.map((m) => (
+                        {(data.available_months ?? []).map((m) => (
                             <option key={m} value={m}>{formatMonth(m)}</option>
                         ))}
                     </select>
@@ -177,28 +183,28 @@ export default function IndisponibilidadePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard
                     title="Impacto Total"
-                    value={formatCurrency(stats.total_valor)}
-                    target={stats.total_itens}
+                    value={formatCurrency(stats.total_valor ?? 0)}
+                    target={stats.total_itens ?? 0}
                     variation="+4.2%"
                     icon="payments"
                 />
                 <KpiCard
                     title="Tratado"
-                    value={formatCurrency(stats.total_valor - stats.pendente_valor)}
-                    target={stats.total_itens - stats.pendente_itens}
-                    variation={`${((stats.total_valor - stats.pendente_valor) / stats.total_valor * 100).toFixed(1)}%`}
+                    value={formatCurrency((stats.total_valor ?? 0) - (stats.pendente_valor ?? 0))}
+                    target={(stats.total_itens ?? 0) - (stats.pendente_itens ?? 0)}
+                    variation={`${(((stats.total_valor ?? 0) - (stats.pendente_valor ?? 0)) / (stats.total_valor || 1) * 100).toFixed(1)}%`}
                     icon="task_alt"
                 />
                 <KpiCard
                     title="Pendente"
-                    value={formatCurrency(stats.pendente_valor)}
-                    target={stats.pendente_itens}
+                    value={formatCurrency(stats.pendente_valor ?? 0)}
+                    target={stats.pendente_itens ?? 0}
                     variation="-1.5%"
                     icon="pending_actions"
                 />
                 <KpiCard
                     title="Aderência"
-                    value={`${stats.aderencia}%`}
+                    value={`${stats.aderencia ?? 0}%`}
                     target="95.0%"
                     variation="+0.5%"
                     icon="bolt"
@@ -220,7 +226,7 @@ export default function IndisponibilidadePage() {
 
                     <div className="flex-1 w-full relative">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={data.pareto.slice(0, 8)} layout="vertical" margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
+                            <BarChart data={(data.pareto ?? []).slice(0, 8)} layout="vertical" margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(148, 163, 184, 0.05)" />
                                 <XAxis type="number" hide />
                                 <YAxis
@@ -234,10 +240,10 @@ export default function IndisponibilidadePage() {
                                 <Tooltip
                                     cursor={{ fill: 'rgba(0,0,0,0.02)' }}
                                     contentStyle={{ borderRadius: '2px', border: '1px solid var(--border)', backgroundColor: 'var(--surface)', fontSize: '9px', fontWeight: '600', textTransform: 'uppercase' }}
-                                    formatter={(v: any) => [formatCurrencyFull(v), "IMPACTO"]}
+                                    formatter={(v: any) => [formatCurrencyFull(v ?? 0), "IMPACTO"]}
                                 />
                                 <Bar dataKey="Valor" radius={[0, 2, 2, 0]} barSize={20}>
-                                    {data.pareto.slice(0, 8).map((_, index) => (
+                                    {(data.pareto ?? []).slice(0, 8).map((_, index) => (
                                         <Cell key={`cell-${index}`} fill={index < 3 ? '#f43f5e' : '#1152d4'} />
                                     ))}
                                 </Bar>
@@ -264,15 +270,15 @@ export default function IndisponibilidadePage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border text-[12px]">
-                                {data.regionais.map((r) => (
+                                {(data.regionais ?? []).map((r) => (
                                     <tr key={r.Regional} className="hover:bg-surface/50 transition-colors">
                                         <td className="p-3 pl-4">
-                                            <p className="font-semibold text-text-heading uppercase tracking-tight">{r.Regional}</p>
-                                            <p className="text-[10px] text-emerald-500 font-medium uppercase mt-0.5">{r.TratadoPct.toFixed(1)}% Aderência</p>
+                                            <p className="font-semibold text-text-heading uppercase tracking-tight">{r.Regional ?? "N/D"}</p>
+                                            <p className="text-[10px] text-emerald-500 font-medium uppercase mt-0.5">{(r.TratadoPct ?? 0).toFixed(1)}% Aderência</p>
                                         </td>
                                         <td className="p-3 text-right pr-4">
-                                            <p className="font-semibold text-text-heading/80 tabular-nums">{formatCurrency(r.TratadoValor)}</p>
-                                            <p className="text-[10px] text-rose-500 font-medium uppercase">Pend: {formatCurrency(r.PendenteValor)}</p>
+                                            <p className="font-semibold text-text-heading/80 tabular-nums">{formatCurrency(r.TratadoValor ?? 0)}</p>
+                                            <p className="text-[10px] text-rose-500 font-medium uppercase">Pend: {formatCurrency(r.PendenteValor ?? 0)}</p>
                                         </td>
                                     </tr>
                                 ))}
@@ -330,11 +336,13 @@ export default function IndisponibilidadePage() {
                             {getSortedMatrix().map((row, idx) => (
                                 <tr key={idx} className="hover:bg-surface/30 transition-colors group">
                                     <td className="p-2 pl-4 font-semibold text-text-heading sticky left-0 z-10 bg-surface group-hover:bg-surface border-r border-border max-w-[200px] truncate">
-                                        {row.Tipo}
+                                        {row.Tipo ?? "N/D"}
                                     </td>
-                                    {data.regionais_list?.map(reg => {
-                                        const totalCell = (row[reg]?.pendente || 0) + (row[reg]?.tratado || 0);
-                                        const hasPending = row[reg]?.pendente > 0;
+                                    {(data.regionais_list ?? []).map(reg => {
+                                        const subPendente = row[reg]?.pendente ?? 0;
+                                        const subTratado = row[reg]?.tratado ?? 0;
+                                        const totalCell = subPendente + subTratado;
+                                        const hasPending = subPendente > 0;
                                         return (
                                             <td key={reg} className="p-2 text-right">
                                                 {totalCell > 0 ? (
@@ -344,7 +352,7 @@ export default function IndisponibilidadePage() {
                                         )
                                     })}
                                     <td className="p-2 text-right bg-primary/5 font-semibold text-text-heading border-l border-border tabular-nums">
-                                        {formatCurrency(row._total_impacto)}
+                                        {formatCurrency(row._total_impacto ?? 0)}
                                     </td>
                                 </tr>
                             ))}

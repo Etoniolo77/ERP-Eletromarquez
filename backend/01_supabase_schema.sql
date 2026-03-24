@@ -22,6 +22,7 @@ CREATE TABLE public.produtividade (
     desvios_min DOUBLE PRECISION,
     deslocamento_min DOUBLE PRECISION,
     hhp_min DOUBLE PRECISION,
+    hhr_min DOUBLE PRECISION DEFAULT 0.0,
     saida_base_min DOUBLE PRECISION DEFAULT 0.0,
     retorno_base_min DOUBLE PRECISION DEFAULT 0.0,
     hora_extra_min DOUBLE PRECISION DEFAULT 0.0

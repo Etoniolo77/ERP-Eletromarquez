@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange } from "@/lib/dateRange"
-import { safeFetch } from "@/lib/apiFetcher"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET(req: NextRequest) {
   try {
@@ -8,22 +8,53 @@ export async function GET(req: NextRequest) {
     const periodo = searchParams.get("periodo") || "month"
 
     const { startDate, endDate } = getDateRange(periodo)
+    const supabase = await createClient()
     
-    const data = await safeFetch<any[]>(`/proxy/rejeicoes_records?data.gte=${startDate}&data.lte=${endDate}`, [])
+    // Attempt to fetch data for the selected period
+    let { data, error } = await supabase
+      .from("rejeicoes_records")
+      .select("*")
+      .gte("data", startDate)
+      .lte("data", endDate)
 
-    if (data.length === 0) {
+    if (error) throw error
+
+    // Fallback logic: if no data, fetch the latest available month
+    if (!data || data.length === 0) {
+      const { data: latestRecord } = await supabase
+        .from("rejeicoes_records")
+        .select("data")
+        .order("data", { ascending: false })
+        .limit(1)
+        .single()
+
+      if (latestRecord) {
+        const latestDate = new Date(latestRecord.data)
+        const fbStart = new Date(latestDate.getFullYear(), latestDate.getMonth(), 1).toISOString()
+        const fbEnd = new Date(latestDate.getFullYear(), latestDate.getMonth() + 1, 0).toISOString()
+        
+        const { data: fallbackData } = await supabase
+          .from("rejeicoes_records")
+          .select("*")
+          .gte("data", fbStart)
+          .lte("data", fbEnd)
+        
+        data = fallbackData
+      }
+    }
+
+    if (!data || data.length === 0) {
       return NextResponse.json({
         last_update: new Date().toISOString(),
         stats: { total_rejeicoes: 0, media_rejeicoes_dia: 0, principal_motivo: "N/A", conformidade: 100 },
         charts: { labels: [], datasets: [] },
         regionais: [],
         ofensores: [],
-        insights: [{ type: "info", text: "Sem registros de rejeições no período selecionado." }]
+        insights: [{ type: "info", text: "Sem registros de rejeições disponíveis." }]
       })
     }
 
     const round1 = (n: number) => Math.round(n * 10) / 10
-
     const total_rejeicoes = data.length
     
     // Group by Motivo
@@ -53,7 +84,7 @@ export async function GET(req: NextRequest) {
     const ofensores = Object.entries(equipeMap)
       .map(([equipe, v]) => ({ equipe, regional: v.regional, total: v.count }))
       .sort((a, b) => b.total - a.total)
-      .slice(0, 5)
+      .slice(0, 10) // Show top 10 instead of 5
 
     // History: daily
     const histMap: Record<string, number> = {}
@@ -80,13 +111,19 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       last_update: new Date().toISOString(),
-      stats: { total_rejeicoes, media_rejeicoes_dia: round1(total_rejeicoes / 30), principal_motivo, conformidade: 0 },
+      stats: { 
+        total_rejeicoes, 
+        media_rejeicoes_dia: round1(total_rejeicoes / (sortedDates.length || 1)), 
+        principal_motivo, 
+        conformidade: 0 
+      },
       charts,
       regionais,
       ofensores,
       insights
     })
   } catch (err: any) {
+    console.error("Error in Rejeicoes API:", err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

@@ -188,8 +188,8 @@ export default function Page5SControle() {
     let evoChartData: any[] = []
     if (dashData?.evolucao) {
         evoChartData = (dashData.evolucao.labels || []).map((label, i) => ({
-            name: label,
-            value: dashData.evolucao.data?.[i] || 0
+            name: label ?? "N/D",
+            value: dashData.evolucao?.data?.[i] ?? 0
         }))
     }
 
@@ -203,25 +203,28 @@ export default function Page5SControle() {
 
     // -- Derived Data for Historico --
     const sortedHistory = useMemo(() => {
-        const filtered = historico.filter(h =>
+        const filtered = (historico ?? []).filter(h =>
             !searchTerm ||
-            h.base.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            h.local.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            h.inspetor.toLowerCase().includes(searchTerm.toLowerCase())
+            (h.base ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (h.local ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (h.inspetor ?? "").toLowerCase().includes(searchTerm.toLowerCase())
         )
 
         if (!sortConfig.key) return filtered
 
         return [...filtered].sort((a, b) => {
-            const aValue = a[sortConfig.key!]
-            const bValue = b[sortConfig.key!]
+            const aValue = a[sortConfig.key!] ?? ""
+            const bValue = b[sortConfig.key!] ?? ""
 
             if (sortConfig.key === 'data') {
                 const parseDate = (d: string) => {
-                    const [day, month, year] = d.split('/').map(Number)
+                    if (!d) return 0
+                    const parts = d.split('/')
+                    if (parts.length !== 3) return 0
+                    const [day, month, year] = parts.map(Number)
                     return new Date(year, month - 1, day).getTime()
                 }
-                return sortConfig.direction === 'asc' ? parseDate(a.data) - parseDate(b.data) : parseDate(b.data) - parseDate(a.data)
+                return sortConfig.direction === 'asc' ? parseDate(a.data ?? "") - parseDate(b.data ?? "") : parseDate(b.data ?? "") - parseDate(a.data ?? "")
             }
 
             if (typeof aValue === 'number' && typeof bValue === 'number') {
@@ -237,62 +240,63 @@ export default function Page5SControle() {
     const filteredHistory = sortedHistory
 
     const histStats = useMemo(() => {
-        if (!historico.length) return { topInsp: null, botInsp: null, worstLoc: null, alertCount: 0 }
+        if (!(historico ?? []).length) return { topInsp: { name: 'N/A', avg: 0 }, botInsp: { name: 'N/A', avg: 0 }, worstLoc: { name: 'N/A', avg: 0 }, alertCount: 0 }
         const inspMap: Record<string, { sum: number, qtd: number }> = {}
         const locMap: Record<string, { sum: number, qtd: number }> = {}
         let alertCount = 0
 
         historico.forEach(h => {
-            if (!inspMap[h.inspetor]) inspMap[h.inspetor] = { sum: 0, qtd: 0 }
-            inspMap[h.inspetor].sum += h.nota
-            inspMap[h.inspetor].qtd += 1
+            const insp = h.inspetor ?? "N/D"
+            if (!inspMap[insp]) inspMap[insp] = { sum: 0, qtd: 0 }
+            inspMap[insp].sum += h.nota ?? 0
+            inspMap[insp].qtd += 1
 
             const baseName = h.base && h.base !== 'N/A' ? h.base : ''
             const locName = h.local && h.local !== 'N/A' ? h.local : ''
             const lKey = baseName && locName ? `${baseName} / ${locName}` : (baseName || locName || 'Local Indefinido')
 
             if (!locMap[lKey]) locMap[lKey] = { sum: 0, qtd: 0 }
-            locMap[lKey].sum += h.nota
+            locMap[lKey].sum += h.nota ?? 0
             locMap[lKey].qtd += 1
 
-            if (h.nota < 80) alertCount++
+            if ((h.nota ?? 0) < 80) alertCount++
         })
 
         const sortedInsps = Object.entries(inspMap)
-            .map(([n, s]) => ({ name: n, avg: Math.round(s.sum / s.qtd) }))
+            .map(([n, s]) => ({ name: n, avg: Math.round(s.sum / (s.qtd || 1)) }))
             .filter(item => item.avg > 0)
             .sort((a, b) => b.avg - a.avg)
 
         const sortedLocs = Object.entries(locMap)
-            .map(([n, s]) => ({ name: n, avg: Math.round(s.sum / s.qtd) }))
+            .map(([n, s]) => ({ name: n, avg: Math.round(s.sum / (s.qtd || 1)) }))
             .filter(item => item.avg > 0)
             .sort((a, b) => a.avg - b.avg)
 
         return {
-            topInsp: sortedInsps[0],
-            botInsp: sortedInsps[sortedInsps.length - 1],
-            worstLoc: sortedLocs[0],
+            topInsp: sortedInsps[0] || { name: 'N/A', avg: 0 },
+            botInsp: sortedInsps[sortedInsps.length - 1] || { name: 'N/A', avg: 0 },
+            worstLoc: sortedLocs[0] || { name: 'N/A', avg: 0 },
             alertCount
         }
     }, [historico])
 
     const filteredPlanos = useMemo(() => {
-        return planos.filter(p => {
+        return (planos ?? []).filter(p => {
             const s = searchTerm.toLowerCase()
             const matchSearch = !s ||
-                p.base.toLowerCase().includes(s) ||
-                p.local.toLowerCase().includes(s) ||
-                p.responsavel.toLowerCase().includes(s) ||
-                p.acao_sugerida.toLowerCase().includes(s) ||
-                p.pergunta.toLowerCase().includes(s)
+                (p.base ?? "").toLowerCase().includes(s) ||
+                (p.local ?? "").toLowerCase().includes(s) ||
+                (p.responsavel ?? "").toLowerCase().includes(s) ||
+                (p.acao_sugerida ?? "").toLowerCase().includes(s) ||
+                (p.pergunta ?? "").toLowerCase().includes(s)
 
             const matchStatus = statusFilter === "ALL" || p.status === statusFilter
-            const matchSenso = sensoFilter === "ALL" || p.codigo.startsWith(sensoFilter)
+            const matchSenso = sensoFilter === "ALL" || (p.codigo ?? "").startsWith(sensoFilter)
 
             const strBase = String(p.base || "").toUpperCase()
             const strLocal = String(p.local || "").toUpperCase()
             // Multi-select global filter for Base
-            const matchBase = selectedBases.length === 0 ||
+            const matchBase = (selectedBases ?? []).length === 0 ||
                 selectedBases.map(b => b.toUpperCase()).includes(strBase) ||
                 selectedBases.map(b => b.toUpperCase()).includes(strLocal)
 
@@ -301,15 +305,15 @@ export default function Page5SControle() {
         })
     }, [planos, searchTerm, statusFilter, sensoFilter, selectedBases, responsavelFilter])
 
-    const criticosCount = planos.filter(a => a.status === 'CRÍTICO').length
-    const locsSet = new Set(planos.map(a => `${a.base}-${a.local}`))
-    const baseLocalFreq = planos.filter(p => p.status === 'CRÍTICO').reduce((acc, curr) => {
-        const key = `${curr.base} / ${curr.local}`
+    const criticosCount = (planos ?? []).filter(a => a.status === 'CRÍTICO').length
+    const locsSet = new Set((planos ?? []).map(a => `${a.base}-${a.local}`))
+    const baseLocalFreq = (planos ?? []).filter(p => p.status === 'CRÍTICO').reduce((acc, curr) => {
+        const key = `${curr.base ?? "N/D"} / ${curr.local ?? "N/D"}`
         acc[key] = (acc[key] || 0) + 1
         return acc
     }, {} as Record<string, number>)
     const topOffender = Object.entries(baseLocalFreq).sort((a, b) => b[1] - a[1])[0] || ["Nenhum", 0]
-    const oldestAction = [...planos].sort((a, b) => b.dias_aberto - a.dias_aberto)[0]
+    const oldestAction = [...(planos ?? [])].sort((a, b) => (b.dias_aberto ?? 0) - (a.dias_aberto ?? 0))[0]
 
     const exportXLSX = async () => {
         try {
@@ -480,17 +484,17 @@ export default function Page5SControle() {
                                 <div className="flex-1 overflow-auto custom-scrollbar">
                                     <table className="w-full text-left">
                                         <tbody className="divide-y divide-border">
-                                            {dashData.hierarchy?.flatMap(h => h.locais)
-                                                .filter(l => l.conformidade < dashData.meta_5s)
-                                                .sort((a, b) => a.conformidade - b.conformidade)
+                                            {(dashData.hierarchy ?? []).flatMap(h => h.locais ?? [])
+                                                .filter(l => (l.conformidade ?? 0) < (dashData?.meta_5s ?? 80))
+                                                .sort((a, b) => (a.conformidade ?? 0) - (b.conformidade ?? 0))
                                                 .slice(0, 10).map((l, i) => (
                                                     <tr key={i} className="hover:bg-surface/50 transition-colors">
                                                         <td className="p-2 pl-4">
-                                                            <p className="text-[12px] font-semibold text-text-heading uppercase truncate w-32">{l.name}</p>
+                                                            <p className="text-[12px] font-semibold text-text-heading uppercase truncate w-32">{l.name ?? "N/D"}</p>
                                                         </td>
                                                         <td className="p-2 text-right pr-4">
-                                                            <p className="text-[12px] font-semibold text-rose-500 tabular-nums">{l.conformidade}%</p>
-                                                            <p className="text-[10px] text-text-muted font-medium uppercase">GAP: {(dashData.meta_5s - l.conformidade).toFixed(1)}%</p>
+                                                            <p className="text-[12px] font-semibold text-rose-500 tabular-nums">{l.conformidade ?? 0}%</p>
+                                                            <p className="text-[10px] text-text-muted font-medium uppercase">GAP: {((dashData?.meta_5s ?? 80) - (l.conformidade ?? 0)).toFixed(1)}%</p>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -522,42 +526,43 @@ export default function Page5SControle() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border">
-                                        {dashData.hierarchy?.map((base, bIdx) => {
+                                        {(dashData.hierarchy ?? []).map((base, bIdx) => {
                                             const isExpanded = openBase === base.name
+                                            const meta = dashData?.meta_5s ?? 80
                                             return (
                                                 <Fragment key={bIdx}>
-                                                    <tr onClick={() => setOpenBase(isExpanded ? null : base.name)} className="hover:bg-surface/50 cursor-pointer transition-colors group">
+                                                    <tr onClick={() => setOpenBase(isExpanded ? null : (base.name ?? null))} className="hover:bg-surface/50 cursor-pointer transition-colors group">
                                                         <td className="p-3 pl-4">
                                                             <div className="flex items-center gap-3">
                                                                 <span className={`material-symbols-outlined text-[18px] transition-transform ${isExpanded ? 'rotate-180 text-primary' : 'text-slate-300'}`}>expand_more</span>
                                                                 <div>
-                                                                    <p className="text-[12px] font-semibold text-text-heading uppercase tracking-tight group-hover:text-primary">{base.name}</p>
+                                                                    <p className="text-[12px] font-semibold text-text-heading uppercase tracking-tight group-hover:text-primary">{base.name ?? "N/D"}</p>
                                                                     <p className="text-[10px] text-text-muted font-medium uppercase">{base.auditorias || 0} Inspeções</p>
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="p-3 text-[12px] font-semibold text-text-muted uppercase truncate">{base.ultimo_inspetor}</td>
-                                                        <td className="p-3 text-center text-[12px] font-semibold text-text-muted tabular-nums">{base.ultima_data}</td>
-                                                        <td className={`p-3 text-center text-[15px] font-semibold ${base.s1 < dashData.meta_5s ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s1}%</td>
-                                                        <td className={`p-3 text-center text-[15px] font-semibold ${base.s2 < dashData.meta_5s ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s2}%</td>
-                                                        <td className={`p-3 text-center text-[15px] font-semibold ${base.s3 < dashData.meta_5s ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s3}%</td>
-                                                        <td className={`p-3 text-center text-[15px] font-semibold ${base.s4 < dashData.meta_5s ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s4}%</td>
-                                                        <td className={`p-3 text-center text-[15px] font-semibold ${base.s5 < dashData.meta_5s ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s5}%</td>
+                                                        <td className="p-3 text-[12px] font-semibold text-text-muted uppercase truncate">{base.ultimo_inspetor ?? "N/D"}</td>
+                                                        <td className="p-3 text-center text-[12px] font-semibold text-text-muted tabular-nums">{base.ultima_data ?? "N/D"}</td>
+                                                        <td className={`p-3 text-center text-[15px] font-semibold ${(base.s1 ?? 0) < meta ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s1 ?? 0}%</td>
+                                                        <td className={`p-3 text-center text-[15px] font-semibold ${(base.s2 ?? 0) < meta ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s2 ?? 0}%</td>
+                                                        <td className={`p-3 text-center text-[15px] font-semibold ${(base.s3 ?? 0) < meta ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s3 ?? 0}%</td>
+                                                        <td className={`p-3 text-center text-[15px] font-semibold ${(base.s4 ?? 0) < meta ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s4 ?? 0}%</td>
+                                                        <td className={`p-3 text-center text-[15px] font-semibold ${(base.s5 ?? 0) < meta ? 'text-rose-500' : 'text-emerald-500 opacity-60'}`}>{base.s5 ?? 0}%</td>
                                                         <td className="p-3 text-right pr-6 bg-primary/5 border-l border-primary/10 shadow-[inset_2px_0_4px_-2px_rgba(0,0,0,0.05)]">
-                                                            <span className={`text-sm font-semibold ${base.conformidade >= dashData.meta_5s ? 'text-emerald-500' : 'text-rose-500'}`}>{base.conformidade}%</span>
+                                                            <span className={`text-sm font-semibold ${(base.conformidade ?? 0) >= meta ? 'text-emerald-500' : 'text-rose-500'}`}>{base.conformidade ?? 0}%</span>
                                                         </td>
                                                     </tr>
-                                                    {isExpanded && base.locais?.map((local, lIdx) => (
+                                                    {isExpanded && (base.locais ?? []).map((local, lIdx) => (
                                                         <tr key={lIdx} className="bg-surface/30">
-                                                            <td className="p-3 pl-14 text-[11px] font-medium text-text-muted uppercase">{local.name}</td>
-                                                            <td className="p-3 text-[11px] font-medium text-text-muted uppercase truncate">{local.ultimo_inspetor}</td>
-                                                            <td className="p-3 text-center text-[11px] font-semibold text-text-muted tabular-nums">{local.ultima_data}</td>
-                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s1}%</td>
-                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s2}%</td>
-                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s3}%</td>
-                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s4}%</td>
-                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s5}%</td>
-                                                            <td className="p-3 text-right pr-6 bg-primary/5 text-[13px] font-semibold border-l border-primary/5 italic">{local.conformidade}%</td>
+                                                            <td className="p-3 pl-14 text-[11px] font-medium text-text-muted uppercase">{local.name ?? "N/D"}</td>
+                                                            <td className="p-3 text-[11px] font-medium text-text-muted uppercase truncate">{local.ultimo_inspetor ?? "N/D"}</td>
+                                                            <td className="p-3 text-center text-[11px] font-semibold text-text-muted tabular-nums">{local.ultima_data ?? "N/D"}</td>
+                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s1 ?? 0}%</td>
+                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s2 ?? 0}%</td>
+                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s3 ?? 0}%</td>
+                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s4 ?? 0}%</td>
+                                                            <td className="p-3 text-center text-[13px] font-semibold text-text-muted">{local.s5 ?? 0}%</td>
+                                                            <td className="p-3 text-right pr-6 bg-primary/5 text-[13px] font-semibold border-l border-primary/5 italic">{local.conformidade ?? 0}%</td>
                                                         </tr>
                                                     ))}
                                                 </Fragment>
@@ -658,20 +663,20 @@ export default function Page5SControle() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border text-[12px]">
-                                        {filteredHistory.map((row, idx) => (
+                                        {(filteredHistory ?? []).map((row, idx) => (
                                             <tr key={idx} className="hover:bg-surface/50 transition-colors group">
-                                                <td className="p-3 pl-4 font-semibold text-text-heading tabular-nums">{row.data}</td>
-                                                <td className="p-3 text-text-muted font-semibold uppercase text-[10px]">{row.base}</td>
-                                                <td className="p-3 text-text-heading uppercase font-semibold">{row.local}</td>
+                                                <td className="p-3 pl-4 font-semibold text-text-heading tabular-nums">{row.data ?? "N/D"}</td>
+                                                <td className="p-3 text-text-muted font-semibold uppercase text-[10px]">{row.base ?? "N/D"}</td>
+                                                <td className="p-3 text-text-heading uppercase font-semibold">{row.local ?? "N/D"}</td>
                                                 <td className="p-3 text-center">
-                                                    <span className="bg-surface text-text-muted px-2 py-0.5 rounded-sm text-[9px] font-semibold uppercase border border-border">{row.tipo}</span>
+                                                    <span className="bg-surface text-text-muted px-2 py-0.5 rounded-sm text-[9px] font-semibold uppercase border border-border">{row.tipo ?? "N/A"}</span>
                                                 </td>
                                                 <td className="p-3 text-center">
-                                                    <span className={`inline-flex items-center justify-center px-4 py-1 rounded-sm text-[11px] font-semibold tabular-nums min-w-[60px] ${row.nota >= 90 ? 'bg-emerald-500 text-white shadow-sm' : row.nota >= 75 ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'}`}>
-                                                        {row.nota}%
+                                                    <span className={`inline-flex items-center justify-center px-4 py-1 rounded-sm text-[11px] font-semibold tabular-nums min-w-[60px] ${(row.nota ?? 0) >= 90 ? 'bg-emerald-500 text-white shadow-sm' : (row.nota ?? 0) >= 75 ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'}`}>
+                                                        {row.nota ?? 0}%
                                                     </span>
                                                 </td>
-                                                <td className="p-3 text-text-muted uppercase font-semibold italic">{row.inspetor}</td>
+                                                <td className="p-3 text-text-muted uppercase font-semibold italic">{row.inspetor ?? "N/D"}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -741,30 +746,30 @@ export default function Page5SControle() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border text-[12px]">
-                                        {filteredPlanos.map((plano, idx) => (
+                                        {(filteredPlanos ?? []).map((plano, idx) => (
                                             <tr key={idx} className="hover:bg-surface/50 transition-colors">
                                                 <td className="p-3 pl-4">
-                                                    <p className="text-[10px] text-text-muted font-semibold uppercase">{plano.base}</p>
-                                                    <p className="text-text-heading uppercase font-semibold">{plano.local}</p>
+                                                    <p className="text-[10px] text-text-muted font-semibold uppercase">{plano.base ?? "N/D"}</p>
+                                                    <p className="text-text-heading uppercase font-semibold">{plano.local ?? "N/D"}</p>
                                                 </td>
-                                                <td className="p-3 text-text-muted uppercase font-semibold text-[10px]">{plano.responsavel}</td>
+                                                <td className="p-3 text-text-muted uppercase font-semibold text-[10px]">{plano.responsavel ?? "N/D"}</td>
                                                 <td className="p-3">
                                                     <div className="flex items-center gap-2 mb-1">
-                                                        <span className="px-1.5 py-0.5 bg-primary/5 text-primary text-[10px] font-semibold rounded-sm border border-primary/10">{plano.codigo}</span>
+                                                        <span className="px-1.5 py-0.5 bg-primary/5 text-primary text-[10px] font-semibold rounded-sm border border-primary/10">{plano.codigo ?? "???"}</span>
                                                     </div>
-                                                    <p className="text-[12px] text-text-muted font-semibold italic line-clamp-2">"{plano.pergunta}"</p>
+                                                    <p className="text-[12px] text-text-muted font-semibold italic line-clamp-2">"{plano.pergunta ?? "Sem descrição"}"</p>
                                                 </td>
                                                 <td className="p-3">
-                                                    <p className="text-[12px] text-text-heading uppercase leading-tight">{plano.acao_sugerida}</p>
+                                                    <p className="text-[12px] text-text-heading uppercase leading-tight">{plano.acao_sugerida ?? "Nenhuma ação definida"}</p>
                                                 </td>
                                                 <td className="p-3 text-center">
-                                                    <span className={`px-2 py-1 rounded-sm text-[9px] font-semibold ${plano.dias_aberto > 30 ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                                                        {plano.dias_aberto}D
+                                                    <span className={`px-2 py-1 rounded-sm text-[9px] font-semibold ${(plano.dias_aberto ?? 0) > 30 ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                                        {plano.dias_aberto ?? 0}D
                                                     </span>
                                                 </td>
                                                 <td className="p-3 text-right pr-4">
                                                     <span className={`px-2 py-1 rounded-sm text-[9px] font-semibold uppercase ${plano.status === 'CRÍTICO' ? 'bg-rose-500 text-white' : 'bg-slate-200 text-slate-700'}`}>
-                                                        {plano.status}
+                                                        {plano.status ?? "PENDENTE"}
                                                     </span>
                                                 </td>
                                             </tr>

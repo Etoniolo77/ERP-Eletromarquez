@@ -3,7 +3,7 @@
  * Handles timeouts, connection errors, and provides safe fallbacks.
  */
 
-const DEFAULT_API_URL = "http://127.0.0.1:8001/api/v1";
+const DEFAULT_API_URL = "http://127.0.0.1:8000/api/v1";
 
 export async function safeFetch<T>(
   path: string, 

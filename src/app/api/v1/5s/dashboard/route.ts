@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange } from "@/lib/dateRange"
-import { safeFetch } from "@/lib/apiFetcher"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,17 +9,55 @@ export async function GET(req: NextRequest) {
     const base = searchParams.get("base") || ""
 
     const { startDate, endDate } = getDateRange(periodo)
+    const supabase = await createClient()
     
-    let path = `/proxy/audit_5s?data_auditoria.gte=${startDate}&data_auditoria.lte=${endDate}`
+    // Attempt to fetch data for the selected period
+    let query = supabase
+      .from("audit_5s")
+      .select("*")
+      .gte("data_auditoria", startDate)
+      .lte("data_auditoria", endDate)
+
     if (base && base !== "Todas") {
-      path += `&base=${encodeURIComponent(base)}`
+      query = query.eq("base", base)
     }
 
-    const data = await safeFetch<any[]>(path, [])
+    let { data, error } = await query
+
+    if (error) throw error
+
+    // Fallback logic: if no data, fetch the latest available month
+    if (!data || data.length === 0) {
+      const { data: latestRecord } = await supabase
+        .from("audit_5s")
+        .select("data_auditoria")
+        .order("data_auditoria", { ascending: false })
+        .limit(1)
+        .single()
+
+      if (latestRecord) {
+        const latestDate = new Date(latestRecord.data_auditoria)
+        const fbStart = new Date(latestDate.getFullYear(), latestDate.getMonth(), 1).toISOString()
+        const fbEnd = new Date(latestDate.getFullYear(), latestDate.getMonth() + 1, 0).toISOString()
+        
+        let fbQuery = supabase
+          .from("audit_5s")
+          .select("*")
+          .gte("data_auditoria", fbStart)
+          .lte("data_auditoria", fbEnd)
+
+        if (base && base !== "Todas") {
+          fbQuery = fbQuery.eq("base", base)
+        }
+        
+        const { data: fallbackData } = await fbQuery
+        data = fallbackData
+      }
+    }
 
     const round1 = (n: number) => Math.round(n * 10) / 10
 
-    if (data.length === 0) {
+    if (!data || data.length === 0) {
       return NextResponse.json({
         last_update: new Date().toISOString(),
         stats: { media_pontuacao: 0, total_auditorias: 0, conformidade_pct: 100, planos_abertos: 0 },
@@ -27,7 +65,7 @@ export async function GET(req: NextRequest) {
         setores: [],
         ofensores: [],
         all_bases: [],
-        insights: [{ type: "info", text: "Sem auditorias de 5S no período selecionado." }]
+        insights: [{ type: "info", text: "Sem auditorias de 5S disponíveis." }]
       })
     }
 
@@ -35,11 +73,15 @@ export async function GET(req: NextRequest) {
 
     const total_auditorias = data.length
     const pts = data.map((r: any) => r.pontuacao || 0)
-    const media_pontuacao = round1(pts.reduce((a: number, b: number) => a + b, 0) / pts.length)
-    const conformidade_pct = round1((data.filter((r: any) => (r.pontuacao || 0) >= 90).length / total_auditorias) * 100)
+    const media_pontuacao = round1(pts.reduce((a: number, b: number) => a + b, 0) / (pts.length || 1))
+    const conformidade_pct = round1((data.filter((r: any) => (r.pontuacao || 0) >= 90).length / (total_auditorias || 1)) * 100)
     
-    const planos = await safeFetch<any[]>("/proxy/planos_5s?status=Aberto", [])
-    const planos_abertos = planos.length
+    const { data: planos } = await supabase
+      .from("planos_5s")
+      .select("*")
+      .eq("status", "Aberto")
+    
+    const planos_abertos = (planos || []).length
 
     // Group by Setor
     const setorMap: Record<string, number[]> = {}
@@ -92,6 +134,7 @@ export async function GET(req: NextRequest) {
       insights
     })
   } catch (err: any) {
+    console.error("Error in 5S API:", err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

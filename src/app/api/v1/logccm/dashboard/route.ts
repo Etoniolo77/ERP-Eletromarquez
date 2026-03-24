@@ -1,26 +1,33 @@
 import { NextResponse } from "next/server"
-import { safeFetch } from "@/lib/apiFetcher"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET() {
   try {
+    const supabase = await createClient()
+
     const [
-      mb52,
-      items,
-      rupturas,
-      seriais
+      { data: mb52 },
+      { data: items },
+      { data: rupturas },
+      { data: seriais }
     ] = await Promise.all([
-      safeFetch<any[]>("/proxy/logccm_mb52", []),
-      safeFetch<any[]>("/proxy/logccm_item", []),
-      safeFetch<any[]>("/proxy/logccm_ruptura", []),
-      safeFetch<any[]>("/proxy/logccm_serial", []),
+      supabase.from("logccm_mb52").select("*"),
+      supabase.from("logccm_item").select("*"),
+      supabase.from("logccm_ruptura").select("*"),
+      supabase.from("logccm_serial").select("*"),
     ])
 
     const round2 = (n: number) => Math.round(n * 100) / 100
 
-    const saldo_virtual = round2(mb52.reduce((a: number, r: any) => a + (r.valor_virtual || 0), 0))
-    const saldo_fisico = round2(mb52.reduce((a: number, r: any) => a + (r.valor_fisico || 0), 0))
+    const mb52_data = mb52 || []
+    const items_data = items || []
+    const rupturas_data = rupturas || []
+    const seriais_data = seriais || []
 
-    const faltas = items.filter((r: any) => (r.saldo || 0) < 0).map((r: any) => ({
+    const saldo_virtual = round2(mb52_data.reduce((a: number, r: any) => a + (r.valor_virtual || 0), 0))
+    const saldo_fisico = round2(mb52_data.reduce((a: number, r: any) => a + (r.valor_fisico || 0), 0))
+
+    const faltas = items_data.filter((r: any) => (r.saldo || 0) < 0).map((r: any) => ({
       regional: r.regional,
       material: r.material,
       descricao: r.descricao,
@@ -31,7 +38,7 @@ export async function GET() {
       valor: r.valor || 0,
     }))
 
-    const sobras = items.filter((r: any) => (r.saldo || 0) > 0).map((r: any) => ({
+    const sobras = items_data.filter((r: any) => (r.saldo || 0) > 0).map((r: any) => ({
       regional: r.regional,
       material: r.material,
       descricao: r.descricao,
@@ -48,13 +55,14 @@ export async function GET() {
 
     // Resumo grupos from mb52
     const gruposMap: Record<string, { virtual: number; fisico: number; fisico_sem: number; regional: string }> = {}
-    mb52.forEach((r: any) => {
+    mb52_data.forEach((r: any) => {
       const key = r.grupo_nome || r.grupo || "N/D"
       if (!gruposMap[key]) gruposMap[key] = { virtual: 0, fisico: 0, fisico_sem: 0, regional: r.regional || "" }
       gruposMap[key].virtual += (r.valor_virtual || 0)
       gruposMap[key].fisico += (r.valor_fisico || 0)
       gruposMap[key].fisico_sem += (r.valor_fisico_sem_pedalada || 0)
     })
+    
     const resumo_grupos = Object.entries(gruposMap).map(([nome, v]) => ({
       grupo_nome: nome,
       regional: v.regional,
@@ -81,8 +89,8 @@ export async function GET() {
     } else {
       insights.push({ type: "warning", text: `Superávit de R$ ${netDiff.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — verificar inconsistências de inventário.` })
     }
-    if (rupturas.length > 0) {
-      insights.push({ type: "danger", text: `${rupturas.length} itens em situação de ruptura de estoque.` })
+    if (rupturas_data.length > 0) {
+      insights.push({ type: "danger", text: `${rupturas_data.length} itens em situação de ruptura de estoque.` })
     }
 
     return NextResponse.json({
@@ -93,11 +101,12 @@ export async function GET() {
       resumo_grupos_sem_pedalada,
       faltas,
       sobras,
-      ruptura: rupturas,
-      serializados: seriais,
+      ruptura: rupturas_data,
+      serializados: seriais_data,
       insights
     })
   } catch (err: any) {
+    console.error("Error in Log CCM API:", err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

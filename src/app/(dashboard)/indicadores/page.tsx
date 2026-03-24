@@ -49,7 +49,7 @@ export default function DashboardHome() {
         api.get('/produtividade/ranking', { signal: abortRef.current.signal }),
         api.get('/global/dashboard', { signal: abortRef.current.signal })
       ])
-      setRanking(respRank.data)
+      setRanking(respRank.data ?? [])
 
       // Map icons for Material Symbols
       const iconMap: Record<string, string> = {
@@ -59,7 +59,8 @@ export default function DashboardHome() {
         "Clock": "schedule"
       }
 
-      const mappedKpis = respGlobal.data.kpis.map((k: KpiApiItem): KpiMapped => ({
+      const kpis = respGlobal.data?.kpis ?? []
+      const mappedKpis = kpis.map((k: KpiApiItem): KpiMapped => ({
         ...k,
         icon: iconMap[k.icon] || "analytics",
         target: (k.target as string) || "85%", // Placeholder meta if missing
@@ -71,6 +72,8 @@ export default function DashboardHome() {
       const err = e as { name?: string; code?: string }
       if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
       console.error(e)
+      setRanking([])
+      setGlobalKpis([])
     } finally {
       setLoading(false)
     }
@@ -153,14 +156,14 @@ export default function DashboardHome() {
                   ranking.map((r, i) => (
                     <tr key={i} className="hover:bg-surface/50 transition-colors">
                       <td className="p-4">
-                        <p className="text-[11px] font-semibold text-text-heading">{r.equipe}</p>
-                        <p className="text-[9px] text-text-muted uppercase font-medium">{r.setor}</p>
+                        <p className="text-[11px] font-semibold text-text-heading">{r?.equipe ?? "N/D"}</p>
+                        <p className="text-[9px] text-text-muted uppercase font-medium">{r?.setor ?? "N/D"}</p>
                       </td>
                       <td className="p-4 text-right text-xs font-semibold text-rose-500 bg-rose-500/5 tabular-nums">
-                        {Math.round(r.ociosidade)}m
+                        {Math.round(r?.ociosidade ?? 0)}m
                       </td>
                       <td className="p-4 text-right text-xs font-medium text-text-muted tabular-nums">
-                        {Math.round(r.produtividade)}%
+                        {Math.round(r?.produtividade ?? 0)}%
                       </td>
                     </tr>
                   ))

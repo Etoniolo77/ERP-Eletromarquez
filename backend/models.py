@@ -21,6 +21,7 @@ class Produtividade(Base):
     desvios_min = Column(Float)
     deslocamento_min = Column(Float)
     hhp_min = Column(Float)
+    hhr_min = Column(Float, default=0.0)
     
     # Indicadores específicos CCM
     saida_base_min = Column(Float, default=0.0)

@@ -30,6 +30,11 @@ def push_table(table_name, chunk_size=500):
     columns_info = cursor.fetchall()
     columns = [col["name"] for col in columns_info if col["name"] != "id"]
     
+    # Filtro de segurança para evitar erro de 'column not found' no Supabase
+    if table_name == "produtividade":
+        allowed = ["equipe", "tipo_equipe", "setor", "data", "csd", "ocupacao", "produtividade_pct", "eficiencia_pct", "eficacia_pct", "notas_executadas", "notas_interrompidas", "notas_rejeitadas", "ociosidade_min", "desvios_min", "deslocamento_min", "hhp_min", "saida_base_min", "retorno_base_min", "hora_extra_min"]
+        columns = [c for c in columns if c in allowed]
+    
     cursor.execute(f"SELECT * FROM {table_name}")
     rows = cursor.fetchall()
     

@@ -70,7 +70,7 @@ export default function TurmasPage() {
         setLoading(true)
         setError(null)
         try {
-            if (forceSync) await triggerSync("produtividade")
+            // if (forceSync) await triggerSync("produtividade")
             const response = await api.get(`/produtividade/dashboard?periodo=${period}&view=${view}`, { signal: abortRef.current.signal })
             setDashData(response.data)
         } catch (err: unknown) {
@@ -108,9 +108,9 @@ export default function TurmasPage() {
     )
     if (!dashData) return null
 
-    const chartData = dashData.chart.labels.map((label, i) => ({
+    const chartData = (dashData.chart?.labels ?? []).map((label, i) => ({
         name: label,
-        prod: dashData.chart.data[i]
+        prod: dashData.chart?.data?.[i] ?? 0
     }))
 
     return (

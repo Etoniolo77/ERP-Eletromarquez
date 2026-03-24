@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getDateRange } from "@/lib/dateRange"
-import { safeFetch } from "@/lib/apiFetcher"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,18 +10,44 @@ export async function GET(req: NextRequest) {
 
     const { startDate, endDate } = getDateRange(periodo)
     
-    const data = await safeFetch<any[]>(`/proxy/saida_base_records?data.gte=${startDate}&data.lte=${endDate}`, [])
+    const supabase = await createClient()
+    let { data, error } = await supabase
+      .from("saida_base_records")
+      .select("*")
+      .gte("data", startDate)
+      .lte("data", endDate)
+
+    if (error) throw new Error(error.message)
+    
+    let records = data || []
     const meta = 30 // meta em minutos
+
+    // FALLBACK: If current period has no data, fetch latest month available
+    if (records.length === 0) {
+      const { data: latestData, error: latestError } = await supabase
+        .from("saida_base_records")
+        .select("*")
+        .order("data", { ascending: false })
+        .limit(300)
+      
+      if (latestError) throw new Error(latestError.message)
+      
+      if (latestData && latestData.length > 0) {
+        const latestDate = latestData[0].data
+        const latestMonth = latestDate.substring(0, 7)
+        records = latestData.filter(r => r.data && r.data.startsWith(latestMonth))
+      }
+    }
 
     const round1 = (n: number) => Math.round(n * 10) / 10
     const round2 = (n: number) => Math.round(n * 100) / 100
 
-    if (data.length === 0) {
+    if (records.length === 0) {
       return NextResponse.json({
         last_update: new Date().toISOString(),
         meta,
         period_label: `${startDate} a ${endDate}`,
-        stats: { media_dia: 0, media_mes: 0, equipes_dentro_meta: 0, total_equipes: 0, pct_conformidade: 100, ritmo_comparativo: 0 },
+        stats: { media_dia: 0, media_mes: 0, equipes_dentro_meta: 0, total_equipes: 0, pct_conformidade: 100, ritmo_comparativo: 0, indice_ipe: 0, total_equipes_periodo: 0 },
         insights: [{ type: "info", text: "Sem dados de saída de base para o período selecionado." }],
         custo_projetado: 0,
         maiores_ofensores_equipes: [],
@@ -35,25 +61,25 @@ export async function GET(req: NextRequest) {
 
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
 
-    const tempos = data.map((r: any) => r.tempo_embarque || 0)
+    const tempos = records.map((r: any) => r.tempo_embarque || 0)
     const media_dia = round1(avg(tempos))
 
-    const equipes = [...new Set(data.map((r: any) => r.equipe).filter(Boolean))] as string[]
+    const equipes = [...new Set(records.map((r: any) => r.equipe).filter(Boolean))] as string[]
     const total_equipes = equipes.length
 
     const equipeAvgs = equipes.map(eq => {
-      const eqRows = data.filter((r: any) => r.equipe === eq)
+      const eqRows = records.filter((r: any) => r.equipe === eq)
       return avg(eqRows.map((r: any) => r.tempo_embarque || 0))
     })
 
     const equipes_dentro_meta = equipeAvgs.filter(v => v <= meta).length
     const pct_conformidade = total_equipes > 0 ? round1((equipes_dentro_meta / total_equipes) * 100) : 100
 
-    const custo_projetado = round2(data.reduce((a: number, r: any) => a + (r.custo_total || 0), 0))
+    const custo_projetado = round2(records.reduce((a: number, r: any) => a + (r.custo_total || 0), 0))
 
     // Maiores ofensores equipes
     const equipeStats = equipes.map((eq, i) => {
-      const eqRows = data.filter((r: any) => r.equipe === eq)
+      const eqRows = records.filter((r: any) => r.equipe === eq)
       const setor = eqRows[0]?.regional || ""
       const minutos = round1(avg(eqRows.map((r: any) => r.tempo_embarque || 0)))
       const valor_rs = round2(eqRows.reduce((a: number, r: any) => a + (r.custo_total || 0), 0))
@@ -64,24 +90,24 @@ export async function GET(req: NextRequest) {
 
     // Maiores ofensores setor
     const setorMap: Record<string, { minutos: number[]; valor: number }> = {}
-    data.forEach((r: any) => {
+    records.forEach((r: any) => {
       const key = r.regional || "N/D"
       if (!setorMap[key]) setorMap[key] = { minutos: [], valor: 0 }
       setorMap[key].minutos.push(r.tempo_embarque || 0)
       setorMap[key].valor += (r.custo_total || 0)
     })
     const maiores_ofensores_setor = Object.entries(setorMap)
-      .map(([label, v]) => ({ label, minutos: round1(avg(v.minutos)), valor_rs: round2(v.valor) }))
+      .map(([label, v]) => ({ label, minutos: round1(avg(v.minutos)), valor_rs: round2(v.valor), percent: 0 }))
       .sort((a, b) => b.minutos - a.minutos)
       .slice(0, 6)
 
     // Maiores motivos
     const motivoMap: Record<string, number> = {}
-    data.forEach((r: any) => {
+    records.forEach((r: any) => {
       const key = r.motivo || "N/D"
       motivoMap[key] = (motivoMap[key] || 0) + 1
     })
-    const total_motivos = data.length
+    const total_motivos = records.length
     const maiores_motivos = Object.entries(motivoMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
@@ -94,18 +120,18 @@ export async function GET(req: NextRequest) {
 
     // History grouped by period
     const histMap: Record<string, Record<string, number[]>> = {}
-    const regionais = [...new Set(data.map((r: any) => r.regional).filter(Boolean))] as string[]
+    const regionais = [...new Set(records.map((r: any) => r.regional).filter(Boolean))] as string[]
 
-    data.forEach((r: any) => {
+    records.forEach((r: any) => {
       let key = ""
       const d = new Date(r.data || "")
       if (view === "ano") {
-        key = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+        key = `${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
       } else if (view === "semana") {
-        const weekNum = Math.ceil((d.getDate() + new Date(d.getFullYear(), d.getMonth(), 1).getDay()) / 7)
-        key = `Sem ${weekNum}/${d.getMonth() + 1}`
+        const weekNum = Math.ceil((d.getUTCDate() + new Date(d.getUTCFullYear(), d.getUTCMonth(), 1).getUTCDay()) / 7)
+        key = `Sem ${weekNum}/${d.getUTCMonth() + 1}`
       } else {
-        key = d.toISOString().split("T")[0]
+        key = r.data ? (typeof r.data === 'string' ? r.data.split("T")[0] : new Date(r.data).toISOString().split("T")[0]) : "N/D"
       }
       const reg = r.regional || "N/D"
       if (!histMap[key]) histMap[key] = {}
@@ -121,12 +147,12 @@ export async function GET(req: NextRequest) {
 
     // Bases breakdown
     const bases_breakdown = regionais.map(reg => {
-      const regRows = data.filter((r: any) => r.regional === reg)
+      const regRows = records.filter((r: any) => r.regional === reg)
       const regEquipes = [...new Set(regRows.map((r: any) => r.equipe).filter(Boolean))] as string[]
 
       const trendMap: Record<string, number[]> = {}
       regRows.forEach((r: any) => {
-        const d = new Date(r.data || "").toISOString().split("T")[0]
+        const d = r.data ? (typeof r.data === 'string' ? r.data.split("T")[0] : new Date(r.data).toISOString().split("T")[0]) : "N/D"
         if (!trendMap[d]) trendMap[d] = []
         trendMap[d].push(r.tempo_embarque || 0)
       })
@@ -145,12 +171,13 @@ export async function GET(req: NextRequest) {
     })
 
     // Evolucao semanal: compare last 2 weeks
-    const now = new Date()
-    const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7)
-    const twoWeeksAgo = new Date(now); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
+    const latestDateStr = records.length > 0 ? (typeof records[0].data === 'string' ? records[0].data : new Date(records[0].data).toISOString()).split("T")[0] : new Date().toISOString().split("T")[0]
+    const latestDate = new Date(latestDateStr)
+    const weekAgo = new Date(latestDate); weekAgo.setDate(weekAgo.getDate() - 7)
+    const twoWeeksAgo = new Date(latestDate); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
 
-    const thisWeek = data.filter((r: any) => new Date(r.data || "") >= weekAgo)
-    const lastWeek = data.filter((r: any) => new Date(r.data || "") >= twoWeeksAgo && new Date(r.data || "") < weekAgo)
+    const thisWeek = records.filter((r: any) => new Date(r.data || "") >= weekAgo)
+    const lastWeek = records.filter((r: any) => new Date(r.data || "") >= twoWeeksAgo && new Date(r.data || "") < weekAgo)
 
     const evolucaoMap: Record<string, { curr: number[]; prev: number[]; setor: string; regional: string }> = {}
     equipes.forEach(eq => {
@@ -172,7 +199,7 @@ export async function GET(req: NextRequest) {
       if (v.curr.length === 0 || v.prev.length === 0) return
       const curr = avg(v.curr)
       const prev = avg(v.prev)
-      const variacao_pct = round1(Math.abs(((curr - prev) / prev) * 100))
+      const variacao_pct = prev > 0 ? round1(Math.abs(((curr - prev) / prev) * 100)) : 0
       const entry = { equipe: eq, setor: v.setor, regional: v.regional, variacao_pct, semana_atual: round1(curr), semana_anterior: round1(prev) }
       if (curr < prev) melhoraram.push(entry)
       else if (curr > prev) pioraram.push(entry)
@@ -181,14 +208,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       last_update: new Date().toISOString(),
       meta,
-      period_label: `${startDate} a ${endDate}`,
+      period_label: periodo === 'custom' ? `${startDate} a ${endDate}` : periodo,
       stats: {
         media_dia,
         media_mes: media_dia,
         equipes_dentro_meta,
         total_equipes,
         pct_conformidade,
-        ritmo_comparativo: 0
+        ritmo_comparativo: 0,
+        indice_ipe: round1(pct_conformidade),
+        total_equipes_periodo: total_equipes
       },
       insights: [
         {
@@ -208,6 +237,7 @@ export async function GET(req: NextRequest) {
       bases_breakdown
     })
   } catch (err: any) {
+    console.error("[Saida Base API] Error:", err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

@@ -96,26 +96,28 @@ export default function LogCcmPage() {
         if (!data) return null;
         if (selectedBase === 'Todas') return data;
 
-        const faltas = data.faltas.filter((i: any) => i.regional === selectedBase);
-        const sobras = data.sobras.filter((i: any) => i.regional === selectedBase);
-        const ruptura = data.ruptura.filter((i: any) => i.regional === selectedBase);
-        const serializados = data.serializados.filter((i: any) => i.regional === selectedBase);
+        const faltas = (data.faltas ?? []).filter((i: any) => i.regional === selectedBase);
+        const sobras = (data.sobras ?? []).filter((i: any) => i.regional === selectedBase);
+        const ruptura = (data.ruptura ?? []).filter((i: any) => i.regional === selectedBase);
+        const serializados = (data.serializados ?? []).filter((i: any) => i.regional === selectedBase);
 
         // Recalcular resumo_grupos dinamicamente para regional específica
         const groups: Record<string, any> = {};
         [...faltas, ...sobras].forEach(i => {
-            if (!groups[i.grupo]) {
-                groups[i.grupo] = {
-                    grupo: i.grupo,
-                    nome: i.nome_grupo || i.grupo,
+            const grupoKey = i.grupo || 'OUTROS';
+            if (!groups[grupoKey]) {
+                groups[grupoKey] = {
+                    grupo: grupoKey,
+                    nome: i.nome_grupo || grupoKey,
                     valor_falta: 0,
                     valor_sobra: 0,
                     compensacao: 0
                 };
             }
-            if (i.valor < 0) groups[i.grupo].valor_falta += i.valor;
-            else groups[i.grupo].valor_sobra += i.valor;
-            groups[i.grupo].compensacao += i.valor;
+            const val = i.valor ?? 0;
+            if (val < 0) groups[grupoKey].valor_falta += val;
+            else groups[grupoKey].valor_sobra += val;
+            groups[grupoKey].compensacao += val;
         });
 
         return {
@@ -124,7 +126,7 @@ export default function LogCcmPage() {
             sobras,
             ruptura,
             serializados,
-            resumo_grupos: Object.values(groups).sort((a: any, b: any) => a.grupo.localeCompare(b.grupo))
+            resumo_grupos: Object.values(groups).sort((a: any, b: any) => (a.grupo ?? '').localeCompare(b.grupo ?? ''))
         };
     }, [data, selectedBase]);
 
@@ -136,14 +138,15 @@ export default function LogCcmPage() {
 
     const matrizData = useMemo(() => {
         if (!data) return { waterfall: [], matList: [], depots: [], totalFaltas: 0, totalSobras: 0, balanceNet: 0 };
-        const allItems = [...data.faltas, ...data.sobras];
+        const allItems = [...(data.faltas ?? []), ...(data.sobras ?? [])];
 
         const depData: Record<string, number> = {};
         allItems.forEach(i => {
             const val = i.valor || 0;
+            const deposito = i.deposito || 'N/D';
             if (matrixFilter === 'faltas' && val >= 0) return;
             if (matrixFilter === 'sobras' && val <= 0) return;
-            depData[i.deposito] = (depData[i.deposito] || 0) + val;
+            depData[deposito] = (depData[deposito] || 0) + val;
         });
 
         const depots = Object.keys(depData).sort();
@@ -173,10 +176,12 @@ export default function LogCcmPage() {
 
         const materials: Record<string, { material: string, desc: string, data: Record<string, { qty: number, val: number }> }> = {};
         allItems.forEach(i => {
-            if (!materials[i.material]) materials[i.material] = { material: i.material, desc: i.descricao, data: {} };
-            if (!materials[i.material].data[i.deposito]) materials[i.material].data[i.deposito] = { qty: 0, val: 0 };
-            materials[i.material].data[i.deposito].qty += (i.saldo || 0);
-            materials[i.material].data[i.deposito].val += (i.valor || 0);
+            const matKey = i.material || 'N/D';
+            const depKey = i.deposito || 'N/D';
+            if (!materials[matKey]) materials[matKey] = { material: matKey, desc: i.descricao || 'N/D', data: {} };
+            if (!materials[matKey].data[depKey]) materials[matKey].data[depKey] = { qty: 0, val: 0 };
+            materials[matKey].data[depKey].qty += (i.saldo || 0);
+            materials[matKey].data[depKey].val += (i.valor || 0);
         });
 
         let matList = Object.values(materials).filter(m => {
@@ -208,9 +213,9 @@ export default function LogCcmPage() {
             waterfall,
             matList,
             depots,
-            totalFaltas: data.faltas.reduce((a, b) => a + (b.valor || 0), 0),
-            totalSobras: data.sobras.reduce((a, b) => a + (b.valor || 0), 0),
-            balanceNet: total
+            totalFaltas: (data.faltas ?? []).reduce((a, b) => a + (b.valor ?? 0), 0),
+            totalSobras: (data.sobras ?? []).reduce((a, b) => a + (b.valor ?? 0), 0),
+            balanceNet: total || 0
         };
     }, [data, matrixFilter, matrixSort]);
 
@@ -309,14 +314,15 @@ export default function LogCcmPage() {
         if (!data) return [];
         const ins: { type: 'success' | 'warning' | 'danger' | 'info', text: string }[] = [];
 
-        const rupturaCount = data.ruptura.length;
+        const rupturaCount = (data.ruptura ?? []).length;
         if (rupturaCount > 0) {
             ins.push({ type: 'danger', text: `${rupturaCount} ocorrências de ruptura crítica identificadas no horizonte de planejamento operacional.` });
         } else {
             ins.push({ type: 'success', text: 'Nenhuma ruptura crítica identificada no horizonte de planejamento.' });
         }
 
-        const netBalance = data.kpis_globais.valor_sobras - data.kpis_globais.valor_faltas;
+        const stats = data.kpis_globais || { valor_sobras: 0, valor_faltas: 0 };
+        const netBalance = (stats.valor_sobras ?? 0) + (stats.valor_faltas ?? 0);
         if (netBalance < 0) {
             ins.push({ type: 'warning', text: `Balanço físico negativo de ${formatCurrencyFull(netBalance)} — faltas superam sobras no inventário CCM.` });
         } else {
@@ -327,12 +333,13 @@ export default function LogCcmPage() {
     }, [data]);
 
     const kpis = useMemo(() => {
-        if (!filteredData || !data) return { saldo_virtual: 0, saldo_fisico: 0, valor_faltas: 0, valor_sobras: 0, compensacao: 0 };
+        if (!data) return { saldo_virtual: 0, saldo_fisico: 0, valor_faltas: 0, valor_sobras: 0, compensacao: 0 };
         if (selectedBase === 'Todas') return data.kpis_globais || { saldo_virtual: 0, saldo_fisico: 0, valor_faltas: 0, valor_sobras: 0, compensacao: 0 };
 
-        const f = filteredData.faltas.reduce((a, b) => a + (b.valor || 0), 0);
-        const s = filteredData.sobras.reduce((a, b) => a + (b.valor || 0), 0);
-        const v = filteredData.ruptura.reduce((a, b) => a + (b.valor_virtual || 0), 0);
+        const filtered = filteredData || { faltas: [], sobras: [], ruptura: [] };
+        const f = (filtered.faltas ?? []).reduce((a: number, b: any) => a + (b.valor || 0), 0);
+        const s = (filtered.sobras ?? []).reduce((a: number, b: any) => a + (b.valor || 0), 0);
+        const v = (filtered.ruptura ?? []).reduce((a: number, b: any) => a + (b.valor_virtual || 0), 0);
 
         return {
             saldo_virtual: v,
@@ -427,13 +434,13 @@ export default function LogCcmPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border text-[12px]">
-                                    {filteredData.resumo_grupos.filter(g => Math.abs(g.valor_falta) > 1 || Math.abs(g.valor_sobra) > 1).length > 0 ? filteredData.resumo_grupos.filter(g => Math.abs(g.valor_falta) > 1 || Math.abs(g.valor_sobra) > 1).map((g, idx) => {
-                                        const withoutMap = data.resumo_grupos_sem_pedalada.find(sem => sem.grupo === g.grupo) || { compensacao: 0 };
-                                        const compSem = withoutMap.compensacao;
-                                        const compCom = g.compensacao;
+                                    {(filteredData?.resumo_grupos ?? []).filter(g => Math.abs(g.valor_falta) > 1 || Math.abs(g.valor_sobra) > 1).length > 0 ? (filteredData?.resumo_grupos ?? []).filter(g => Math.abs(g.valor_falta) > 1 || Math.abs(g.valor_sobra) > 1).map((g, idx) => {
+                                        const withoutMap = (data?.resumo_grupos_sem_pedalada ?? []).find(sem => sem.grupo === g.grupo) || { compensacao: 0, valor_falta: 0, valor_sobra: 0 };
+                                        const compSem = withoutMap.compensacao ?? 0;
+                                        const compCom = g.compensacao ?? 0;
                                         const pedalada = compCom - compSem;
                                         const isExpanded = !!expandedGroups[g.grupo];
-                                        const itemsDoGrupo = [...filteredData.faltas, ...filteredData.sobras].filter(i => i.grupo === g.grupo);
+                                        const itemsDoGrupo = [...(filteredData?.faltas ?? []), ...(filteredData?.sobras ?? [])].filter(i => i.grupo === g.grupo);
 
                                         return (
                                             <Fragment key={idx}>
@@ -442,7 +449,7 @@ export default function LogCcmPage() {
                                                         <span className={`material-symbols-outlined text-[16px] text-text-muted/50 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>chevron_right</span>
                                                     </td>
                                                     <td className="p-2 text-text-muted font-semibold">{g.grupo || '??'}</td>
-                                                    <td className="p-2 text-text-heading uppercase truncate max-w-[300px]">{g.nome}</td>
+                                                    <td className="p-2 text-text-heading uppercase truncate max-w-[300px]">{g.nome ?? "N/D"}</td>
                                                     <td className="p-2 text-right text-text-muted font-semibold tabular-nums">{formatCurrency(Math.abs(withoutMap.valor_falta || 0))}</td>
                                                     <td className="p-2 text-right text-text-muted font-semibold tabular-nums">{formatCurrency(withoutMap.valor_sobra || 0)}</td>
                                                     <td className="p-2 text-right text-text-muted font-semibold italic tabular-nums">{formatCurrency(compSem)}</td>
@@ -456,12 +463,12 @@ export default function LogCcmPage() {
                                                                 {itemsDoGrupo.map((it, i) => (
                                                                     <div key={i} className="bg-surface p-3 rounded-sm border border-border flex justify-between items-center group/item hover:border-primary/50 transition-colors">
                                                                         <div className="overflow-hidden">
-                                                                            <p className="text-[12px] font-semibold text-text-heading uppercase truncate">{it.material}</p>
-                                                                            <p className="text-[10px] text-text-muted font-medium uppercase truncate max-w-[150px]">{it.descricao}</p>
-                                                                            <p className="text-[9px] text-primary font-semibold uppercase mt-1">{it.deposito} • {it.regional}</p>
+                                                                            <p className="text-[12px] font-semibold text-text-heading uppercase truncate">{it.material ?? "N/D"}</p>
+                                                                            <p className="text-[10px] text-text-muted font-medium uppercase truncate max-w-[150px]">{it.descricao ?? "N/D"}</p>
+                                                                            <p className="text-[9px] text-primary font-semibold uppercase mt-1">{it.deposito ?? "N/D"} • {it.regional ?? "N/D"}</p>
                                                                         </div>
                                                                         <span className={`text-[11px] font-semibold tabular-nums ${it.valor > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                                                            {formatCurrency(it.valor)}
+                                                                            {formatCurrency(it.valor ?? 0)}
                                                                         </span>
                                                                     </div>
                                                                 ))}
@@ -551,21 +558,21 @@ export default function LogCcmPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border text-[12px]">
-                                        {matrizData.matList && matrizData.matList.length > 0 ? (
-                                            matrizData.matList.map((m, idx) => {
-                                                let rowTotalVal = Object.values(m.data).reduce((acc: number, d: any) => acc + d.val, 0);
-                                                let rowTotalQty = Object.values(m.data).reduce((acc: number, d: any) => acc + d.qty, 0);
+                                        {(matrizData?.matList ?? []).length > 0 ? (
+                                            (matrizData?.matList ?? []).map((m, idx) => {
+                                                let rowTotalVal = Object.values(m.data ?? {}).reduce((acc: number, d: any) => acc + (d.val ?? 0), 0);
+                                                let rowTotalQty = Object.values(m.data ?? {}).reduce((acc: number, d: any) => acc + (d.qty ?? 0), 0);
                                                 return (
                                                     <tr key={idx} className="hover:bg-surface/50 transition-colors">
-                                                        <td className="p-2 font-semibold text-text-heading border-r border-border tabular-nums min-w-[150px]">{m.material}</td>
-                                                        <td className="p-2 text-text-muted font-semibold uppercase truncate min-w-[350px]">{m.desc}</td>
-                                                        {matrizData.depots.map(d => {
-                                                            const dData = m.data[d];
-                                                            if (!dData || (dData.qty === 0 && dData.val === 0)) return <td key={d} className="p-2 text-right text-border">—</td>;
+                                                        <td className="p-2 font-semibold text-text-heading border-r border-border tabular-nums min-w-[150px]">{m.material ?? "N/D"}</td>
+                                                        <td className="p-2 text-text-muted font-semibold uppercase truncate min-w-[350px]">{m.desc ?? "N/D"}</td>
+                                                        {(matrizData?.depots ?? []).map(d => {
+                                                            const dData = m.data?.[d];
+                                                            if (!dData || ((dData?.qty ?? 0) === 0 && (dData?.val ?? 0) === 0)) return <td key={d} className="p-2 text-right text-border">—</td>;
                                                             return (
                                                                 <td key={d} className="p-2 text-right whitespace-nowrap">
-                                                                    <p className={`text-[11px] font-semibold tabular-nums ${dData.val < 0 ? 'text-rose-500' : 'text-emerald-500'}`}>{formatCurrency(dData.val)}</p>
-                                                                    <p className="text-[8px] text-text-muted/50 font-semibold uppercase">{dData.qty.toFixed(0)} u</p>
+                                                                    <p className={`text-[11px] font-semibold tabular-nums ${(dData?.val ?? 0) < 0 ? 'text-rose-500' : 'text-emerald-500'}`}>{formatCurrency(dData?.val ?? 0)}</p>
+                                                                    <p className="text-[8px] text-text-muted/50 font-semibold uppercase">{(dData?.qty ?? 0).toFixed(0)} u</p>
                                                                 </td>
                                                             );
                                                         })}
@@ -654,10 +661,10 @@ export default function LogCcmPage() {
                                     </thead>
                                     <tbody className="divide-y divide-border text-[12px]">
                                         {ruptureGroupBy === 'material' ? (
-                                            rupturaData.byMat.length === 0 ? (
+                                            (rupturaData?.byMat ?? []).length === 0 ? (
                                                 <tr><td colSpan={5} className="p-0"><EmptyState icon="warning" title="Nenhum ofensor identificado" description="Sem ruptura crítica identificada no horizonte de planejamento." /></td></tr>
                                             ) : (
-                                                rupturaData.byMat.map((g, idx) => {
+                                                (rupturaData?.byMat ?? []).map((g, idx) => {
                                                     const isExpanded = !!expandedRuptura[g.key];
                                                     return (
                                                         <Fragment key={g.key}>
@@ -666,13 +673,13 @@ export default function LogCcmPage() {
                                                                     <span className={`material-symbols-outlined text-[16px] text-text-muted/50 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>chevron_right</span>
                                                                 </td>
                                                                 <td className="p-2">
-                                                                    <p className="text-text-heading font-semibold uppercase text-[13px] group-hover:text-rose-500 transition-colors">{g.material}</p>
-                                                                    <p className="text-[11px] text-text-muted font-medium uppercase truncate max-w-[350px]">{g.descricao}</p>
+                                                                    <p className="text-text-heading font-semibold uppercase text-[13px] group-hover:text-rose-500 transition-colors">{g.material ?? "N/D"}</p>
+                                                                    <p className="text-[11px] text-text-muted font-medium uppercase truncate max-w-[350px]">{g.descricao ?? "N/D"}</p>
                                                                 </td>
-                                                                <td className="p-2 text-right text-text-muted font-semibold tabular-nums text-[13px]">{g.saldo_fisico.toFixed(1)}</td>
-                                                                <td className="p-2 text-right text-rose-500 font-semibold tabular-nums text-[13px]">{g.total_necessaria.toFixed(1)}</td>
+                                                                <td className="p-2 text-right text-text-muted font-semibold tabular-nums text-[13px]">{(g.saldo_fisico ?? 0).toFixed(1)}</td>
+                                                                <td className="p-2 text-right text-rose-500 font-semibold tabular-nums text-[13px]">{(g.total_necessaria ?? 0).toFixed(1)}</td>
                                                                 <td className="p-2 text-center">
-                                                                    <span className="px-2 py-0.5 bg-rose-500 text-white rounded-sm text-[8px] font-semibold uppercase">{g.itemsWithBalance.length} Alertas</span>
+                                                                    <span className="px-2 py-0.5 bg-rose-500 text-white rounded-sm text-[8px] font-semibold uppercase">{(g.itemsWithBalance ?? []).length} Alertas</span>
                                                                 </td>
                                                             </tr>
                                                             {isExpanded && (
@@ -691,15 +698,15 @@ export default function LogCcmPage() {
                                                                                     </tr>
                                                                                 </thead>
                                                                                 <tbody className="divide-y divide-border">
-                                                                                    {g.itemsWithBalance.map((i: any, subIdx: number) => (
+                                                                                    {(g.itemsWithBalance ?? []).map((i: any, subIdx: number) => (
                                                                                         <tr key={subIdx} className="hover:bg-primary/5 transition-colors">
-                                                                                            <td className="p-2 text-text-heading uppercase">{i.regional}</td>
+                                                                                            <td className="p-2 text-text-heading uppercase">{i.regional ?? "N/D"}</td>
                                                                                             <td className="p-2 text-text-muted">{i.diagrama || 'N/A'}</td>
-                                                                                            <td className="p-2 text-center text-primary font-semibold">{i.data_deslig}</td>
-                                                                                            <td className="p-2 text-right text-text-muted">{i.qtd_necessaria.toFixed(1)}</td>
-                                                                                            <td className="p-2 text-right text-rose-500 font-semibold">{i.currentBalance.toFixed(1)}</td>
+                                                                                            <td className="p-2 text-center text-primary font-semibold">{i.data_deslig ?? "N/D"}</td>
+                                                                                            <td className="p-2 text-right text-text-muted">{(i.qtd_necessaria ?? 0).toFixed(1)}</td>
+                                                                                            <td className="p-2 text-right text-rose-500 font-semibold">{(i.currentBalance ?? 0).toFixed(1)}</td>
                                                                                             <td className="p-2 text-center">
-                                                                                                <span className={`px-1.5 py-0.5 rounded-sm border ${i.classif.includes('REPOSIÇÃO') ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>{i.classif}</span>
+                                                                                                <span className={`px-1.5 py-0.5 rounded-sm border ${(i.classif ?? '').includes('REPOSIÇÃO') ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>{i.classif ?? "FALTA MATERIAL"}</span>
                                                                                             </td>
                                                                                         </tr>
                                                                                     ))}
@@ -714,10 +721,10 @@ export default function LogCcmPage() {
                                                 })
                                             )
                                         ) : (
-                                            rupturaData.byDate.length === 0 ? (
+                                            (rupturaData?.byDate ?? []).length === 0 ? (
                                                 <tr><td colSpan={2} className="p-0"><EmptyState icon="warning" title="Nenhum ofensor identificado" description="Sem eventos críticos previstos no horizonte selecionado." /></td></tr>
                                             ) : (
-                                                rupturaData.byDate.map((g, idx) => {
+                                                (rupturaData?.byDate ?? []).map((g, idx) => {
                                                     const isExpanded = !!expandedRuptura[g.key];
                                                     return (
                                                         <Fragment key={g.key}>
@@ -726,30 +733,30 @@ export default function LogCcmPage() {
                                                                     <span className={`material-symbols-outlined text-[16px] text-text-muted/50 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>calendar_today</span>
                                                                 </td>
                                                                 <td className="p-4 flex items-center gap-4">
-                                                                    <span className="text-[14px] font-semibold text-primary tabular-nums tracking-tighter">{g.date}</span>
-                                                                    <span className="text-[9px] text-text-muted font-semibold uppercase">{g.items.length} SKUs em Ruptura Crítica</span>
+                                                                    <span className="text-[14px] font-semibold text-primary tabular-nums tracking-tighter">{g.date ?? "N/D"}</span>
+                                                                    <span className="text-[9px] text-text-muted font-semibold uppercase">{(g.items ?? []).length} SKUs em Ruptura Crítica</span>
                                                                 </td>
                                                             </tr>
-                                                            {isExpanded && g.items.map((i: any, subIdx: number) => (
+                                                            {isExpanded && (g.items ?? []).map((i: any, subIdx: number) => (
                                                                 <tr key={subIdx} className="bg-rose-500/[0.02]">
                                                                     <td></td>
                                                                     <td className="p-3">
                                                                         <div className="bg-surface border border-border p-3 rounded-sm flex justify-between items-center border-l-2 border-l-rose-500">
                                                                             <div>
-                                                                                <p className="text-[10px] font-semibold text-text-heading uppercase">{i.material} • <span className="text-primary">{i.regional}</span></p>
-                                                                                <p className="text-[9px] text-text-muted font-medium uppercase truncate max-w-[200px]">{i.descricao}</p>
+                                                                                <p className="text-[10px] font-semibold text-text-heading uppercase">{i.material ?? "N/D"} • <span className="text-primary">{i.regional ?? "N/D"}</span></p>
+                                                                                <p className="text-[9px] text-text-muted font-medium uppercase truncate max-w-[200px]">{i.descricao ?? "N/D"}</p>
                                                                                 <p className="text-[8px] text-text-muted/50 font-semibold uppercase mt-1">Diagrama: {i.diagrama || 'N/A'}</p>
                                                                             </div>
                                                                             <div className="flex gap-8 text-right">
                                                                                 <div>
                                                                                     <p className="text-[8px] font-semibold text-text-muted uppercase mb-1">Impacto OS</p>
-                                                                                    <p className="text-[14px] font-semibold text-text-heading tabular-nums">{i.qtd_necessaria.toFixed(1)} <span className="text-[8px] opacity-40">un</span></p>
+                                                                                    <p className="text-[14px] font-semibold text-text-heading tabular-nums">{(i.qtd_necessaria ?? 0).toFixed(1)} <span className="text-[8px] opacity-40">un</span></p>
                                                                                 </div>
                                                                                 <div className="bg-rose-500/5 p-2 rounded-sm border border-rose-500/10 min-w-[120px]">
                                                                                     <p className="text-[8px] font-semibold text-rose-500 uppercase mb-1">Déficit Projetado</p>
                                                                                     <p className="text-[14px] font-semibold text-rose-500 tabular-nums animate-pulse">
-                                                                                        <span className="text-[9px] opacity-40 mr-1 italic">{i.balanceBefore.toFixed(1)} →</span>
-                                                                                        {i.projectedBalance.toFixed(1)}
+                                                                                        <span className="text-[9px] opacity-40 mr-1 italic">{(i.balanceBefore ?? 0).toFixed(1)} →</span>
+                                                                                        {(i.projectedBalance ?? 0).toFixed(1)}
                                                                                     </p>
                                                                                 </div>
                                                                             </div>
