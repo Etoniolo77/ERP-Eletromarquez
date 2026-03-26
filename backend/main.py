@@ -66,6 +66,20 @@ app.include_router(proxy_router.router)
 def read_root():
     return {"message": "Bem-vindo a API do Portal 3.1", "status": "running"}
 
+import numpy as np
+import pandas as pd
+
+def clean_data(data):
+    """Substitui NaN/Inf por None (null) recursivamente para integridade do JSON."""
+    if isinstance(data, list):
+        return [clean_data(i) for i in data]
+    if isinstance(data, dict):
+        return {k: clean_data(v) for k, v in data.items()}
+    if isinstance(data, float):
+        if np.isnan(data) or np.isinf(data):
+            return None
+    return data
+
 @app.get("/api/v1/produtividade/dashboard")
 def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", sector: str = None, csd: str = None, equipe: str = None, metric: str = "ocupacao", db: Session = Depends(get_db)):
     """ Endpoint Mestre para renderizar a exata UI do Legacy Produtividade """
@@ -572,6 +586,7 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
             "evolucao": evolucao,
             "insights": insights
         }
+        result = clean_data(result)
         api_cache.set(cache_key, result)
         return result
     except Exception as e:
@@ -1480,7 +1495,7 @@ def get_frota_dashboard(periodo: str = "month", sector: str = None, regional: st
             for m in matrix_group if m.regional and m.setor and str(m.regional).lower() not in ['nan', 'none', 'n/d'] and str(m.setor).lower() not in ['nan', 'none', 'n/d']
         ]
 
-        return {
+        result = {
             "period_label": max_date.strftime('%d/%m/%Y') if hasattr(max_date, 'strftime') else str(max_date),
             "stats": {
                 "total_custo": total_custos,
@@ -1513,6 +1528,9 @@ def get_frota_dashboard(periodo: str = "month", sector: str = None, regional: st
             "source_file": "FROTA 2025.xlsx",
             "last_update": db.query(models.SyncLog).filter(models.SyncLog.source_file == "FROTA 2025.xlsx").order_by(models.SyncLog.last_sync.desc()).first().last_sync.strftime("%d/%m/%Y %H:%M") if db.query(models.SyncLog).filter(models.SyncLog.source_file == "FROTA 2025.xlsx").first() else "N/A"
         }
+        result = clean_data(result)
+        api_cache.set(cache_key, result)
+        return result
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
