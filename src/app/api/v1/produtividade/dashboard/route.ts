@@ -156,6 +156,7 @@ export async function GET(req: NextRequest) {
       insights.push({ type: "info", text: `${atingimento_meta}% das equipes atingiram a meta de produtividade.` })
     }
 
+    // Final response structure aligned with main.py
     return NextResponse.json({
       meta_prod,
       periodo_ref: `${startDate} a ${endDate}`,
@@ -164,20 +165,42 @@ export async function GET(req: NextRequest) {
       stats: {
         media_prod,
         trend_prod,
+        media_ociosidade: Math.round(avg(records.map((r: any) => r.ociosidade_min || 0)) * 10) / 10,
+        trend_ociosidade: 0,
+        media_saida_base: Math.round(avg(records.map((r: any) => r.saida_base_min || 0)) * 10) / 10,
+        trend_saida: 0,
+        media_retorno_base: Math.round(avg(records.map((r: any) => r.retorno_base_min || 0)) * 10) / 10,
+        trend_retorno: 0,
         total_ociosidade_hrs,
         total_desvios_hrs,
+        total_hora_extra_hrs: Math.round(records.reduce((a: number, r: any) => a + (r.hora_extra_min || 0), 0) / 60 * 10) / 10,
         total_notas,
         total_rejeicoes,
         total_equipes,
         atingimento_meta,
-        num_dias: new Set(records.map((r: any) => r.data ? r.data.split("T")[0] : null).filter(Boolean)).size
+        num_dias: new Set(records.map((r: any) => r.data ? (typeof r.data === 'string' ? r.data.split("T")[0] : new Date(r.data).toISOString().split("T")[0]) : null).filter(Boolean)).size
       },
       chart: { labels: chartLabels, data: chartData },
+      charts: {
+        ocupacao: { labels: chartLabels, data: chartData },
+        ociosidade: { 
+          labels: equipes.slice(0, 15), 
+          data: equipes.slice(0, 15).map(eq => Math.round(avg(records.filter((r: any) => r.equipe === eq).map((r: any) => r.ociosidade_min || 0)) * 10) / 10)
+        },
+        desvios: {
+          labels: equipes.slice(0, 15),
+          data: equipes.slice(0, 15).map(eq => Math.round(avg(records.filter((r: any) => r.equipe === eq).map((r: any) => r.desvios_min || 0)) * 10) / 10)
+        }
+      },
       top_desvios: [],
       top_piores,
       top_melhores,
       breakdown_csd,
-      insights
+      insights,
+      evolucao: [...new Set(records.map((r: any) => r.data))].sort().map(d => ({
+         name: typeof d === 'string' ? d.substring(8, 10) + '/' + d.substring(5, 7) : new Date(d as any).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+         value: Math.round(avg(records.filter((r: any) => r.data === d).map((r: any) => r.produtividade_pct || 0)) * 10) / 10
+      }))
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

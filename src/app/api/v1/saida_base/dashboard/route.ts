@@ -216,6 +216,7 @@ export async function GET(req: NextRequest) {
         total_equipes,
         pct_conformidade,
         ritmo_comparativo: 0,
+        ipe: round1(pct_conformidade),
         indice_ipe: round1(pct_conformidade),
         total_equipes_periodo: total_equipes
       },

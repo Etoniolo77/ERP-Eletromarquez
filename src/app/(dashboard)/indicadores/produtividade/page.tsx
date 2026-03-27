@@ -187,10 +187,9 @@ export default function CcmProdutividadePage() {
                 <div className="bg-surface border border-border p-4 rounded-sm flex items-center gap-4 shadow-sm hover:border-primary/30 transition-all">
                     <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
                         <span className="material-symbols-outlined text-amber-500 text-[20px]">more_time</span>
-                    </div>
-                    <div>
+                                        <div>
                         <p className="text-[10px] font-semibold text-text-muted uppercase tracking-widest">Hora Extra (Acumulada)</p>
-                        <p className="text-lg font-bold text-text-heading tabular-nums">{dashData.stats.total_hora_extra_hrs.toFixed(1)} <span className="text-[10px] font-medium text-text-muted">hrs</span></p>
+                        <p className="text-lg font-bold text-text-heading tabular-nums">{(dashData.stats.total_hora_extra_hrs ?? 0).toFixed(1)} <span className="text-[10px] font-medium text-text-muted">hrs</span></p>
                     </div>
                 </div>
 
@@ -200,7 +199,7 @@ export default function CcmProdutividadePage() {
                     </div>
                     <div>
                         <p className="text-[10px] font-semibold text-text-muted uppercase tracking-widest">Notas Executadas (Total)</p>
-                        <p className="text-lg font-bold text-text-heading tabular-nums">{dashData.stats.total_notas} <span className="text-[10px] font-medium text-text-muted">unid</span></p>
+                        <p className="text-lg font-bold text-text-heading tabular-nums">{dashData.stats.total_notas ?? 0} <span className="text-[10px] font-medium text-text-muted">unid</span></p>
                     </div>
                 </div>
 
@@ -211,10 +210,11 @@ export default function CcmProdutividadePage() {
                     <div>
                         <p className="text-[10px] font-semibold text-text-muted uppercase tracking-widest">Notas Interrompidas (Total)</p>
                         <p className="text-lg font-bold text-text-heading tabular-nums">
-                            {dashData.top_piores?.reduce((acc, curr) => acc + (curr.interrompidas || 0), 0)}
+                            {(dashData.top_piores ?? []).reduce((acc, curr) => acc + (curr.interrompidas || 0), 0)}
                             <span className="text-[10px] font-medium text-text-muted ml-1">unid</span>
                         </p>
                     </div>
+  </div>
                 </div>
             </div>
                      {/* Sequence of 3 Operational Charts */}
@@ -224,11 +224,12 @@ export default function CcmProdutividadePage() {
                     { id: 'ociosidade', label: 'Tempo de Ociosidade', meta: 15, unit: 'min', icon: 'schedule', color: 'text-amber-500' },
                     { id: 'desvios', label: 'Desvios de Percurso', meta: 10, unit: 'min', icon: 'warning', color: 'text-rose-500' }
                 ].map((m) => {
-                    const labels = dashData.charts[m.id].labels
-                    const current = dashData.charts[m.id].data
+                    const chartInfo = dashData?.charts?.[m.id]
+                    const labels = chartInfo?.labels || []
+                    const current = chartInfo?.data || []
                     const chartData = labels.map((label, i) => ({
                         name: label,
-                        prod: current[i]
+                        prod: current[i] || 0
                     })).sort((a, b) => m.id === 'ocupacao' ? b.prod - a.prod : a.prod - b.prod)
 
                     return (

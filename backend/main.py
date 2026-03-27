@@ -583,13 +583,20 @@ def get_produtividade_dashboard(periodo: str = "month", view: str = "csd", secto
             "top_piores": top_piores,
             "top_melhores": top_melhores,
             "breakdown_csd": sorted(breakdown_csd, key=lambda x: x["produtividade"] if metric == "ocupacao" else (x["ociosidade"] if metric == "ociosidade" else (x.get("desvios", 0) if metric == "desvios" else x["saida"])), reverse=(metric == "ocupacao")),
-            "evolucao": evolucao,
-            "insights": insights
+            "evolucao": evolucao or [],
+            "insights": insights or [],
+            "history": {
+                "labels": chart_labels or [],
+                "data": chart_data or []
+            }
         }
         result = clean_data(result)
         api_cache.set(cache_key, result)
         return result
     except Exception as e:
+         import traceback
+         print(f"ERRO API PRODUTIVIDADE: {str(e)}")
+         traceback.print_exc()
          raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/produtividade/evolucao")
@@ -2509,6 +2516,7 @@ def get_saida_base_dashboard(view: str = "dia", periodo: str = "latest", db: Ses
                 "equipes_dentro_meta": eq_dentro_meta_periodo,
                 "total_equipes": eq_com_dado_periodo,
                 "pct_conformidade": pct_conf_periodo,
+                "ipe": indice_produtividade_efetiva,
                 "indice_ipe": indice_produtividade_efetiva,
                 "total_equipes_periodo": eq_com_dado_periodo,
                 "ritmo_comparativo": round(media_periodo - media_hoje, 1) # Variação hoje vs Período
@@ -2523,15 +2531,19 @@ def get_saida_base_dashboard(view: str = "dia", periodo: str = "latest", db: Ses
                 "pioraram": pioraram
             },
             "history": {
-                "labels": history_labels,
-                "datasets": history_datasets
+                "labels": history_labels or [],
+                "datasets": history_datasets or {}
             },
-            "bases_breakdown": bases_data
+            "bases_breakdown": bases_data or []
         }
+        result = clean_data(result)
         api_cache.set(cache_key, result)
         return result
 
     except Exception as e:
+        import traceback
+        print(f"ERRO API SAIDA BASE: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

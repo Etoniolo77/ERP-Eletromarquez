@@ -8,7 +8,7 @@ import { KpiCard } from "@/components/dashboard/KpiCard"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { DashboardSkeleton } from "@/components/ui/PageSkeleton"
 import { PageError } from "@/components/ui/PageError"
-import { formatCurrencyCompact, REGIONAL_COLORS } from "@/lib/utils"
+import { formatCurrencyCompact, REGIONAL_COLORS, CHART_COLORS } from "@/lib/utils"
 import { useFilter } from "@/components/providers/FilterProvider"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { useSortableTable } from "@/hooks/useSortableTable"
@@ -106,7 +106,8 @@ export default function SaidaBasePage() {
         let obj: any = { name: lbl }
         const datasets = data?.history?.datasets ?? {};
         Object.keys(datasets).forEach(reg => {
-            obj[reg] = (datasets[reg] ?? [])[idx] ?? 0;
+            const arr = datasets[reg] ?? [];
+            obj[reg] = arr[idx] ?? 0;
         })
         return obj
     })
@@ -264,19 +265,19 @@ export default function SaidaBasePage() {
             {/* Row 3: Motivos & Detalhamento */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 {/* Motivos Chart - 5 Columns */}
-                <div className="md:col-span-5 bg-surface border border-border p-4 rounded-sm flex flex-col h-[400px] shadow-sm transition-all hover:border-primary/30">
+                <div className="md:col-span-12 lg:col-span-5 bg-surface border border-border p-4 rounded-sm flex flex-col h-[400px] shadow-sm transition-all hover:border-primary/30">
                     <div className="flex items-center gap-2 mb-6">
                         <span className="material-symbols-outlined text-primary text-[18px]">bar_chart</span>
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Frequência de Motivos</h3>
                     </div>
-                    <div className="flex-1 w-full">
+                    <div className="flex-1 w-full min-h-0">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={(data?.maiores_motivos ?? []).slice(0, 6)} layout="vertical">
                                 <XAxis type="number" hide />
                                 <YAxis dataKey="label" type="category" axisLine={false} tickLine={false} width={100} tick={{ fontSize: 10, fontWeight: 500, fill: 'var(--text-muted)' }} />
                                 <Bar dataKey="count" fill="#1152d4" radius={[0, 2, 2, 0]} barSize={16}>
-                                    {(data?.maiores_motivos ?? []).slice(0, 6).map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={index === 0 ? '#0b50da' : '#1152d4'} />
+                                    {(data?.maiores_motivos ?? []).slice(0, 6).map((_, index: number) => (
+                                        <Cell key={`cell-${index}`} fill={['#1152d4', '#1e68e4', '#4785ef', '#70a2f7', '#99bffb', '#c2dbff'][index % 6]} />
                                     ))}
                                     <LabelList dataKey="percent" position="right" offset={10} formatter={(v: any) => `${Number(v ?? 0).toFixed(1)}%`} style={{ fontSize: 9, fontWeight: 700, fill: 'var(--text-heading)' }} />
                                 </Bar>
@@ -286,8 +287,45 @@ export default function SaidaBasePage() {
                     </div>
                 </div>
 
-                {/* Setores Ofensores - 3 Columns */}
-                <div className="md:col-span-3 bg-surface border border-border rounded-sm flex flex-col h-[400px] shadow-sm transition-all hover:border-amber-500/30">
+                {/* Evolution over time - 7 Columns */}
+                <div className="md:col-span-12 lg:col-span-7 bg-surface border border-border p-4 rounded-sm flex flex-col h-[400px] shadow-sm transition-all hover:border-primary/30">
+                    <div className="flex items-center gap-2 mb-8">
+                        <span className="material-symbols-outlined text-primary text-[18px]">show_chart</span>
+                        <h3 className="text-xs font-semibold uppercase tracking-widest text-text-heading">Evolução do Tempo de Saída (Frequência)</h3>
+                    </div>
+                    <div className="flex-1 w-full min-h-0">
+                       <ResponsiveContainer width="100%" height="100%">
+                           <AreaChart data={(data?.history?.labels || []).map((label: string, i: number) => {
+                               const point: any = { data: label };
+                               const datasets = data?.history?.datasets ?? {};
+                               Object.keys(datasets).forEach((ds: string) => {
+                                   point[ds] = (datasets[ds] ?? [])[i] ?? 0;
+                               });
+                               return point;
+                           })}>
+                               <defs>
+                                   <linearGradient id="colorSaida" x1="0" y1="0" x2="0" y2="1">
+                                       <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.1}/>
+                                       <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                                   </linearGradient>
+                               </defs>
+                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.3} />
+                               <XAxis dataKey="data" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: 'var(--text-muted)', fontWeight: 600 }} dy={10} />
+                               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: 'var(--text-muted)', fontWeight: 600 }} dx={-10} unit="m" />
+                               <Tooltip contentStyle={{ borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: 'var(--surface)', fontSize: '10px' }} />
+                               <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }} />
+                               {Object.keys(data.history?.datasets || {}).map((ds, idx) => (
+                                   <Area key={ds} type="monotone" dataKey={ds} stroke={CHART_COLORS[idx % CHART_COLORS.length]} fillOpacity={1} fill={`url(#colorSaida)`} strokeWidth={2} activeDot={{ r: 4, strokeWidth: 0 }} />
+                               ))}
+                           </AreaChart>
+                       </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                {/* Setores Ofensores - 4 Columns */}
+                <div className="md:col-span-4 bg-surface border border-border rounded-sm flex flex-col h-[400px] shadow-sm transition-all hover:border-amber-500/30">
                     <div className="px-4 py-2 border-b border-border flex items-center gap-2">
                         <span className="material-symbols-outlined text-amber-500 text-[18px]">domain</span>
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-heading">Setores Ofensores</h3>
@@ -308,7 +346,7 @@ export default function SaidaBasePage() {
                                             <td className="p-2 pl-4 font-medium text-text-heading uppercase tracking-tight">{s.label ?? "N/D"}</td>
                                             <td className="p-2 text-right text-text-muted/80 font-semibold">{(s.percent ?? 0).toFixed(1)}%</td>
                                             <td className="p-2 text-right pr-4">
-                                                <p className="font-semibold text-rose-500 tabular-nums">{formatCurrency(s.valor_rs ?? 0)}</p>
+                                                <p className="font-semibold text-rose-500 tabular-nums">{(s.valor_rs ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                                                 <p className="text-[9px] text-text-muted font-medium">{Math.round(s.minutos ?? 0)}m</p>
                                             </td>
                                         </tr>
@@ -325,8 +363,8 @@ export default function SaidaBasePage() {
                     </div>
                 </div>
 
-                {/* Pioras/Melhorias - 4 Columns split */}
-                <div className="md:col-span-4 grid grid-rows-2 gap-6 h-[400px]">
+                {/* Pioras/Melhorias - 8 Columns */}
+                <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6 h-[400px]">
                     <div className="bg-surface border border-border rounded-sm flex flex-col overflow-hidden shadow-sm transition-all hover:border-emerald-500/30">
                         <div className="px-4 py-2 border-b border-border flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -339,7 +377,7 @@ export default function SaidaBasePage() {
                             <table className="w-full text-left">
                                 <tbody className="divide-y divide-border text-[11px]">
                                     {data?.evolucao_semanal?.melhoraram && data.evolucao_semanal.melhoraram.length > 0 ? (
-                                        data.evolucao_semanal.melhoraram.slice(0, 4).map((eq: any, i: number) => (
+                                        data.evolucao_semanal.melhoraram.slice(0, 6).map((eq: any, i: number) => (
                                             <tr key={i} className="hover:bg-surface/50 transition-colors">
                                                 <td className="p-2 pl-4 font-medium text-text-heading uppercase tracking-tight truncate max-w-[200px]">{eq.equipe}</td>
                                                 <td className="p-2 text-right pr-4 font-semibold text-emerald-500 tabular-nums">{Math.abs(eq.variacao_pct)}%</td>
@@ -368,7 +406,7 @@ export default function SaidaBasePage() {
                             <table className="w-full text-left">
                                 <tbody className="divide-y divide-border text-[11px]">
                                     {data?.evolucao_semanal?.pioraram && data.evolucao_semanal.pioraram.length > 0 ? (
-                                        data.evolucao_semanal.pioraram.slice(0, 4).map((eq: any, i: number) => (
+                                        data.evolucao_semanal.pioraram.slice(0, 6).map((eq: any, i: number) => (
                                             <tr key={i} className="hover:bg-surface/50 transition-colors">
                                                 <td className="p-2 pl-4 font-medium text-text-heading uppercase tracking-tight truncate max-w-[200px]">{eq.equipe}</td>
                                                 <td className="p-2 text-right pr-4 font-semibold text-rose-500 tabular-nums">+{eq.variacao_pct}%</td>
@@ -388,7 +426,7 @@ export default function SaidaBasePage() {
                 </div>
             </div>
 
-            {/* Regional Performance Section - EXATO PADRÃO APR DIGITAL */}
+            {/* Regional Performance Section */}
             <div>
                 <div className="flex flex-col gap-1 mb-6">
                     <h2 className="text-xs font-semibold text-text-heading uppercase tracking-widest">Desempenho por Regional</h2>

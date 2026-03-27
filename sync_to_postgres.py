@@ -64,10 +64,9 @@ def sync_table_to_pg(table_name):
 
 if __name__ == "__main__":
     start = time.time()
-    sync_table_to_pg("apr_records")
-    sync_table_to_pg("auditorias_5s")
-    sync_table_to_pg("produtividade")
-    sync_table_to_pg("frota_custos")
-    sync_table_to_pg("itens_estoque")
-    sync_table_to_pg("movimentacoes")
+    for table in ["apr_records", "auditorias_5s", "produtividade", "frota_custos", "saida_base_records", "itens_estoque", "movimentacoes"]:
+        try:
+              sync_table_to_pg(table)
+        except Exception as e:
+              print(f"   -> [FALHA TOTAL NO SYNC DE {table}]: {e}")
     print(f"\n[FINALIZADO] Tempo total: {round(time.time() - start, 2)}s")
